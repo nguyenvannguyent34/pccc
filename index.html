@@ -363,6 +363,20 @@
       font-size:13px;
       color:#667085;
     }
+
+    .welcome-illustration{
+      width:100%;
+      border-radius:16px;
+      overflow:hidden;
+      border:1px solid #e1e7f0;
+      background:#fff;
+      box-shadow:0 10px 24px rgba(16,24,40,.06);
+    }
+    .welcome-illustration img{
+      display:block;
+      width:100%;
+      height:auto;
+    }
     .copyright{
       text-align:center;
       color:#fff;
@@ -434,6 +448,7 @@
             <label for="unit">Đơn vị</label>
             <select id="unit">
               <option value="">-- Chọn đơn vị --</option>
+              <option>Đội Công tác phòng cháy</option>
               <option>Đội Cảnh sát PCCC và CNCH trên sông, biển</option>
               <option>Đội Chữa cháy và cứu nạn, cứu hộ khu vực 1</option>
               <option>Đội Chữa cháy và cứu nạn, cứu hộ khu vực 2</option>
@@ -448,7 +463,7 @@
             </select>
 
             <div class="note-box tiny">
-              Chúc các đồng chí làm bài tốt!.
+              Chúc các đồng chí thi tốt!
             </div>
 
             <div class="flex" style="margin-top:14px">
@@ -597,6 +612,7 @@
                     <th>Họ và tên</th>
                     <th>Đơn vị</th>
                     <th>Điểm</th>
+                    <th>Số câu đúng</th>
                     <th>Tỷ lệ</th>
                     <th>Thời gian làm bài</th>
                   </tr>
@@ -615,13 +631,14 @@
     </div>
   </div>
 
-  <div class="copyright">Design by Đội 2, PC07 Quảng Ninh</div>
+  <div class="copyright">Design by Đội 2, Phòng PC07 Quảng Ninh</div>
 
 <script>
 (() => {
   const EXCEL_FILE = "questions.xlsx";
   const QUESTIONS_PER_EXAM = 20;
   const EXAM_TIME_MINUTES = 20;
+  const POINTS_PER_CORRECT = 0.5;
 
   const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxJ29Mp2uDDurchQAyGLQN7nAg3BApihF9gXHmq2QC-ra92nAToJ328OTYrt4tTSgH7Rg/exec";
   const ADMIN_PASSWORD = "101212019";
@@ -664,6 +681,20 @@
   function updateMain(title, sub) {
     mainTitle.textContent = title;
     mainSub.textContent = sub;
+  }
+
+  function setWelcomeIllustration(type) {
+    const imageMap = {
+      ready: { src: "ready-exam.png", alt: "Sẵn sàng tổ chức thi" },
+      candidate: { src: "candidate-info.png", alt: "Thông tin thí sinh" },
+      admin: { src: "ready-exam.png", alt: "Đăng nhập admin" }
+    };
+    const selected = imageMap[type] || imageMap.ready;
+    $("welcomePanel").innerHTML = `
+      <div class="welcome-illustration">
+        <img src="${selected.src}" alt="${selected.alt}" />
+      </div>
+    `;
   }
 
   function shuffle(arr) {
@@ -822,6 +853,10 @@
     return String(mins).padStart(2, "0") + ":" + String(secs).padStart(2, "0");
   }
 
+  function formatConvertedScore(correctCount) {
+    return (Number(correctCount || 0) * POINTS_PER_CORRECT).toFixed(1);
+  }
+
   async function sendResultToServer(payload) {
     if (!SCRIPT_URL || SCRIPT_URL.includes("PASTE_YOUR")) {
       return { ok: false, message: "Chưa cấu hình SCRIPT_URL." };
@@ -850,6 +885,7 @@
       unit: state.candidate.unit,
       position: state.candidate.position,
       score,
+      convertedScore: Number((score * POINTS_PER_CORRECT).toFixed(1)),
       total,
       percent: Number(((score / total) * 100).toFixed(2)),
       usedSeconds,
@@ -893,7 +929,7 @@
     $("resultName").textContent = state.candidate.fullName;
     $("resultUnit").textContent = state.candidate.unit;
     $("resultPosition").textContent = state.candidate.position;
-    $("resultScore").textContent = score + "/" + total;
+    $("resultScore").textContent = formatConvertedScore(score) + " điểm (" + score + "/" + total + " câu đúng)";
     $("resultTime").textContent = formatSeconds(usedSeconds);
 
     const detailBody = $("resultDetailBody");
@@ -996,7 +1032,7 @@
     body.innerHTML = "";
 
     if (!rows.length) {
-      body.innerHTML = `<tr><td colspan="7" class="muted">Chưa có dữ liệu bài thi.</td></tr>`;
+      body.innerHTML = `<tr><td colspan="8" class="muted">Chưa có dữ liệu bài thi.</td></tr>`;
       $("statTotal").textContent = "0";
       $("statAverage").textContent = "0";
       $("statMax").textContent = "0";
@@ -1014,10 +1050,11 @@
       const score = Number(row.score || 0);
       const total = Number(row.total || QUESTIONS_PER_EXAM) || QUESTIONS_PER_EXAM;
       const percent = total ? ((score / total) * 100) : 0;
+      const convertedScore = Number(row.convertedScore ?? formatConvertedScore(score));
 
-      totalScore += score;
-      max = Math.max(max, score);
-      min = Math.min(min, score);
+      totalScore += convertedScore;
+      max = Math.max(max, convertedScore);
+      min = Math.min(min, convertedScore);
 
       const tr = document.createElement("tr");
       tr.innerHTML = `
@@ -1025,6 +1062,7 @@
         <td>${escapeHtml(formatDateTime(row.submittedAt))}</td>
         <td>${escapeHtml(row.fullName || "")}</td>
         <td>${escapeHtml(row.unit || "")}</td>
+        <td>${convertedScore.toFixed(1)}</td>
         <td>${score}/${total}</td>
         <td>${percent.toFixed(2)}%</td>
         <td>${escapeHtml(row.usedTimeText || formatSeconds(Number(row.usedSeconds || 0)))}</td>
@@ -1034,8 +1072,8 @@
 
     $("statTotal").textContent = String(sorted.length);
     $("statAverage").textContent = (totalScore / sorted.length).toFixed(2);
-    $("statMax").textContent = String(max);
-    $("statMin").textContent = String(min);
+    $("statMax").textContent = max.toFixed(1);
+    $("statMin").textContent = min.toFixed(1);
   }
 
   function formatDateTime(isoString) {
@@ -1050,18 +1088,20 @@
       alert("Chưa có dữ liệu để xuất.");
       return;
     }
-    const headers = ["STT","Thời gian nộp","Họ và tên","Đơn vị","Điểm","Tổng câu","Tỷ lệ","Thời gian làm bài"];
+    const headers = ["STT","Thời gian nộp","Họ và tên","Đơn vị","Điểm","Số câu đúng","Tổng câu","Tỷ lệ","Thời gian làm bài"];
     const lines = [headers.join(",")];
 
     state.adminRows.forEach((row, idx) => {
       const score = Number(row.score || 0);
       const total = Number(row.total || QUESTIONS_PER_EXAM);
       const percent = total ? ((score / total) * 100).toFixed(2) + "%" : "0%";
+      const convertedScore = Number(row.convertedScore ?? formatConvertedScore(score));
       const values = [
         idx + 1,
         csvSafe(formatDateTime(row.submittedAt)),
         csvSafe(row.fullName || ""),
         csvSafe(row.unit || ""),
+        convertedScore.toFixed(1),
         score,
         total,
         percent,
@@ -1088,6 +1128,7 @@
     $("roleList").classList.add("hidden");
     $("candidateForm").classList.remove("hidden");
     updateMain("Thông tin thí sinh", "Nhập thông tin trước khi bắt đầu làm bài.");
+    setWelcomeIllustration("candidate");
     showOnly("welcomePanel");
   });
 
@@ -1095,18 +1136,21 @@
     $("roleList").classList.add("hidden");
     $("adminLogin").classList.remove("hidden");
     updateMain("Đăng nhập admin", "Nhập mật khẩu để xem kết quả tổng hợp.");
+    setWelcomeIllustration("admin");
     showOnly("welcomePanel");
   });
 
   $("btnBackFromCandidate").addEventListener("click", () => {
     resetSidePanels();
     updateMain("Sẵn sàng tổ chức thi", "Hệ thống đang chờ lựa chọn chế độ làm việc.");
+    setWelcomeIllustration("ready");
     showOnly("welcomePanel");
   });
 
   $("btnBackFromAdmin").addEventListener("click", () => {
     resetSidePanels();
     updateMain("Sẵn sàng tổ chức thi", "Hệ thống đang chờ lựa chọn chế độ làm việc.");
+    setWelcomeIllustration("ready");
     showOnly("welcomePanel");
   });
 
@@ -1134,6 +1178,7 @@
     $("unit").value = "";
     resetSidePanels();
     updateMain("Thông tin thí sinh", "Nhập thông tin trước khi bắt đầu làm bài.");
+    setWelcomeIllustration("candidate");
     showOnly("welcomePanel");
     $("roleList").classList.add("hidden");
     $("candidateForm").classList.remove("hidden");
@@ -1145,6 +1190,7 @@
     $("unit").value = "";
     resetSidePanels();
     updateMain("Sẵn sàng tổ chức thi", "Hệ thống đang chờ lựa chọn chế độ làm việc.");
+    setWelcomeIllustration("ready");
     showOnly("welcomePanel");
   });
 
@@ -1166,9 +1212,11 @@
     $("adminPassword").value = "";
     resetSidePanels();
     updateMain("Sẵn sàng tổ chức thi", "Hệ thống đang chờ lựa chọn chế độ làm việc.");
+    setWelcomeIllustration("ready");
     showOnly("welcomePanel");
   });
 
+  setWelcomeIllustration("ready");
   renderTimer();
   loadQuestionsFromExcel();
 })();
