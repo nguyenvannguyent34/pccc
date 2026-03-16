@@ -411,7 +411,7 @@
     </div>
     <div class="topbar-title">
       <h1>KIỂM TRA TRỰC TUYẾN NGHIỆP VỤ CÁN BỘ KIỂM TRA PCCC</h1>
-      <div class="sub">Mỗi thí sinh có 20 phút để trả lời 20 câu hỏi trắc nghiệm</div>
+      <div class="sub">Mỗi thí sinh có 15 phút để trả lời 20 câu hỏi trắc nghiệm</div>
     </div>
   </div>
 
@@ -500,7 +500,7 @@
                 <div class="pill"><b>Đơn vị:</b> <span id="candidateUnitView">-</span></div>
                 <div class="pill"><b>Chức vụ:</b> <span id="candidatePositionView">-</span></div>
               </div>
-              <div class="pill timer">Thời gian còn lại: <span id="timeRemaining">20:00</span></div>
+              <div class="pill timer">Thời gian còn lại: <span id="timeRemaining">15:00</span></div>
             </div>
 
             <div class="small muted">
@@ -637,7 +637,7 @@
 (() => {
   const EXCEL_FILE = "questions.xlsx";
   const QUESTIONS_PER_EXAM = 20;
-  const EXAM_TIME_MINUTES = 20;
+  const EXAM_TIME_MINUTES = 15;
   const POINTS_PER_CORRECT = 0.5;
 
   const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxJ29Mp2uDDurchQAyGLQN7nAg3BApihF9gXHmq2QC-ra92nAToJ328OTYrt4tTSgH7Rg/exec";
@@ -1000,7 +1000,7 @@
     $("candidateUnitView").textContent = unit;
     $("candidatePositionView").textContent = position;
 
-    updateMain("Đang làm bài thi", "Mỗi thí sinh có 20 phút để trả lời 20 câu hỏi trắc nghiệm");
+    updateMain("Đang làm bài thi", "Mỗi thí sinh có 15 phút để trả lời 20 câu hỏi trắc nghiệm");
     showOnly("examPanel");
     renderQuestion();
     renderTimer();
