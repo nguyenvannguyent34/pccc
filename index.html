@@ -1264,54 +1264,119 @@
     return Number.isFinite(parsed) ? parsed : null;
   }
 
+  function extractFractionParts(value) {
+    if (value === undefined || value === null) return null;
+    const raw = String(value).trim();
+    if (!raw) return null;
+    const normalized = raw.replace(/\s+/g, "").replace(/,/g, ".");
+    const match = normalized.match(/(-?\d+(?:\.\d+)?)\/(\d+(?:\.\d+)?)/);
+    if (!match) return null;
+    const first = Number(match[1]);
+    const second = Number(match[2]);
+    if (!Number.isFinite(first) || !Number.isFinite(second) || second <= 0) return null;
+    return { first, second };
+  }
+
+  function clampNumber(value, min, max) {
+    return Math.min(max, Math.max(min, value));
+  }
+
+  function normalizePercentNumber(value, rawText = "") {
+    const num = parseFlexibleNumber(value);
+    if (num === null) return null;
+    const hasPercentSign = String(rawText || value || "").includes("%");
+    if (!hasPercentSign && num >= 0 && num <= 1) {
+      return Number((num * 100).toFixed(2));
+    }
+    return Number(num.toFixed(2));
+  }
+
   function normalizeAdminRow(row) {
-    const totalRaw = parseFlexibleNumber(getFirstNonEmptyValue(row, [
+    const totalText = getFirstNonEmptyValue(row, [
       "total", "questionCount", "totalQuestions", "tongCau", "soCau", "Tổng câu", "question_count"
-    ]));
-    const total = Math.max(1, Math.round(totalRaw || QUESTIONS_PER_EXAM));
-
-    const explicitCorrect = parseFlexibleNumber(getFirstNonEmptyValue(row, [
-      "correctCount", "correctAnswers", "soCauDung", "rawScore", "scoreRaw", "Số câu đúng"
-    ]));
-    const explicitConverted = parseFlexibleNumber(getFirstNonEmptyValue(row, [
+    ]);
+    const correctText = getFirstNonEmptyValue(row, [
+      "correctCount", "correctAnswers", "soCauDung", "Số câu đúng"
+    ]);
+    const convertedText = getFirstNonEmptyValue(row, [
       "convertedScore", "point", "points", "diem", "Điểm"
-    ]));
-    const explicitPercent = parseFlexibleNumber(getFirstNonEmptyValue(row, [
+    ]);
+    const percentText = getFirstNonEmptyValue(row, [
       "percent", "percentage", "tyLe", "tỷ lệ", "Tỷ lệ"
-    ]));
-    const genericScore = parseFlexibleNumber(getFirstNonEmptyValue(row, [
+    ]);
+    const scoreText = getFirstNonEmptyValue(row, [
       "score", "resultScore", "ketQua", "kết quả"
-    ]));
+    ]);
 
-    let correctCount = explicitCorrect;
+    const totalFromField = parseFlexibleNumber(totalText);
+    const totalFromCorrectFraction = extractFractionParts(correctText)?.second ?? null;
+    const totalFromScoreFraction = extractFractionParts(scoreText)?.second ?? null;
+    const total = Math.max(1, Math.round(totalFromField || totalFromCorrectFraction || totalFromScoreFraction || QUESTIONS_PER_EXAM));
 
-    if (correctCount === null && explicitConverted !== null) {
-      correctCount = Math.round(explicitConverted / POINTS_PER_CORRECT);
+    const explicitCorrect = parseFlexibleNumber(correctText);
+    const explicitConverted = parseFlexibleNumber(convertedText);
+    const explicitPercent = normalizePercentNumber(percentText, percentText);
+    const genericScore = parseFlexibleNumber(scoreText);
+
+    let correctCount = null;
+    const correctFraction = extractFractionParts(correctText);
+    const scoreFraction = extractFractionParts(scoreText);
+
+    if (correctFraction) {
+      correctCount = correctFraction.first;
+    } else if (explicitCorrect !== null && explicitCorrect <= total) {
+      correctCount = explicitCorrect;
     }
 
-    if (correctCount === null && genericScore !== null) {
-      const scoreFieldText = String(getFirstNonEmptyValue(row, ["score", "resultScore", "ketQua", "kết quả"]));
+    if (correctCount === null && explicitConverted !== null && explicitConverted <= total * POINTS_PER_CORRECT + 0.001) {
+      correctCount = explicitConverted / POINTS_PER_CORRECT;
+    }
 
-      if (explicitPercent !== null) {
-        const percentFromCorrect = total ? (genericScore / total) * 100 : 0;
-        const percentFromConverted = total ? (genericScore / (total * POINTS_PER_CORRECT)) * 100 : 0;
-        const diffCorrect = Math.abs(percentFromCorrect - explicitPercent);
-        const diffConverted = Math.abs(percentFromConverted - explicitPercent);
-        correctCount = diffConverted + 0.01 < diffCorrect
-          ? Math.round(genericScore / POINTS_PER_CORRECT)
-          : Math.round(genericScore);
-      } else if (scoreFieldText.includes(".") || !Number.isInteger(genericScore)) {
-        correctCount = Math.round(genericScore / POINTS_PER_CORRECT);
-      } else if (genericScore <= total * POINTS_PER_CORRECT) {
-        correctCount = Math.round(genericScore / POINTS_PER_CORRECT);
-      } else {
-        correctCount = Math.round(genericScore);
+    if (correctCount === null && scoreFraction) {
+      if (scoreFraction.first <= total) {
+        correctCount = scoreFraction.first;
+      } else if (scoreFraction.first <= total * POINTS_PER_CORRECT + 0.001) {
+        correctCount = scoreFraction.first / POINTS_PER_CORRECT;
       }
     }
 
-    correctCount = Math.min(total, Math.max(0, Math.round(correctCount || 0)));
-    const convertedScore = Number((correctCount * POINTS_PER_CORRECT).toFixed(1));
-    const percent = total ? Number(((correctCount / total) * 100).toFixed(2)) : 0;
+    if (correctCount === null && genericScore !== null) {
+      if (explicitPercent !== null) {
+        const percentFromCorrect = total ? (genericScore / total) * 100 : 0;
+        const percentFromConverted = total ? ((genericScore / POINTS_PER_CORRECT) / total) * 100 : 0;
+        const diffCorrect = Math.abs(percentFromCorrect - explicitPercent);
+        const diffConverted = Math.abs(percentFromConverted - explicitPercent);
+        correctCount = diffConverted + 0.01 < diffCorrect
+          ? (genericScore / POINTS_PER_CORRECT)
+          : genericScore;
+      } else if (genericScore <= total && Number.isInteger(genericScore)) {
+        correctCount = genericScore;
+      } else if (genericScore <= total * POINTS_PER_CORRECT + 0.001) {
+        correctCount = genericScore / POINTS_PER_CORRECT;
+      } else if (!Number.isInteger(genericScore) && Math.abs((genericScore / POINTS_PER_CORRECT) - Math.round(genericScore / POINTS_PER_CORRECT)) < 0.001) {
+        correctCount = genericScore / POINTS_PER_CORRECT;
+      } else {
+        correctCount = genericScore;
+      }
+    }
+
+    correctCount = clampNumber(Math.round(correctCount || 0), 0, total);
+
+    let convertedScore = null;
+    if (explicitConverted !== null && explicitConverted <= total * POINTS_PER_CORRECT + 0.001) {
+      convertedScore = explicitConverted;
+    } else if (genericScore !== null && genericScore <= total * POINTS_PER_CORRECT + 0.001 && genericScore !== correctCount) {
+      convertedScore = genericScore;
+    } else {
+      convertedScore = correctCount * POINTS_PER_CORRECT;
+    }
+    convertedScore = Number(convertedScore.toFixed(1));
+
+    let percent = explicitPercent;
+    if (percent === null) {
+      percent = total ? (correctCount / total) * 100 : 0;
+    }
+    percent = Number(clampNumber(percent, 0, 100).toFixed(2));
 
     return {
       submittedAt: getFirstNonEmptyValue(row, ["submittedAt", "timestamp", "time", "Thời gian nộp"]),
