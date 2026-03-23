@@ -406,6 +406,39 @@
       width:100%;
       height:auto;
     }
+    .exam-status-topup{
+      position:fixed;
+      top:22px;
+      right:22px;
+      z-index:1000;
+      min-width:290px;
+      max-width:420px;
+      padding:14px 18px;
+      border-radius:16px;
+      color:#fff;
+      box-shadow:0 14px 32px rgba(0,0,0,.22);
+      border:1px solid rgba(255,255,255,.18);
+      backdrop-filter:blur(8px);
+      text-shadow:0 1px 2px rgba(0,0,0,.18);
+    }
+    .exam-status-topup.open{
+      background:linear-gradient(135deg, rgba(19,115,51,.96), rgba(34,160,89,.94));
+    }
+    .exam-status-topup.closed{
+      background:linear-gradient(135deg, rgba(198,40,40,.96), rgba(229,57,53,.94));
+    }
+    .exam-status-topup .topup-title{
+      font-size:18px;
+      font-weight:700;
+      text-transform:uppercase;
+      letter-spacing:.3px;
+      margin-bottom:4px;
+    }
+    .exam-status-topup .topup-desc{
+      font-size:14px;
+      line-height:1.45;
+      opacity:.98;
+    }
     .copyright{
       text-align:center;
       color:#fff;
@@ -425,6 +458,13 @@
       .topbar h1{font-size:22px}
       .top-unit .line1{font-size:17px}
       .top-unit .line2{font-size:16px}
+      .exam-status-topup{
+        left:16px;
+        right:16px;
+        top:16px;
+        min-width:0;
+        max-width:none;
+      }
     }
   </style>
 </head>
@@ -442,6 +482,11 @@
       <h1>KIỂM TRA TRỰC TUYẾN NGHIỆP VỤ CÁN BỘ KIỂM TRA PCCC</h1>
       <div class="sub">Mỗi thí sinh có 15 phút để trả lời 20 câu hỏi trắc nghiệm</div>
     </div>
+  </div>
+
+  <div id="examStatusTopup" class="exam-status-topup closed">
+    <div class="topup-title" id="examStatusTopupTitle">CHƯA MỞ THI</div>
+    <div class="topup-desc" id="examStatusTopupDesc">Hệ thống đang cập nhật trạng thái mở thi.</div>
   </div>
 
   <div class="container">
@@ -490,8 +535,6 @@
               <option>Đội Chữa cháy và cứu nạn, cứu hộ khu vực 9</option>
               <option>Đội Chữa cháy và cứu nạn, cứu hộ khu vực 10</option>
             </select>
-
-            <div id="candidateGateStatus" class="status warning">Admin chưa mở lịch thi. Thí sinh chưa thể đăng nhập vào thi.</div>
 
             <div class="note-box tiny">
               Chúc các đồng chí thi tốt!
@@ -733,6 +776,7 @@
   function showOnly(sectionId) {
     ["welcomePanel","examPanel","resultPanel","adminPanel"].forEach(id => $(id).classList.add("hidden"));
     $(sectionId).classList.remove("hidden");
+    syncExamTopupVisibility(sectionId);
   }
 
   function resetSidePanels() {
@@ -869,11 +913,48 @@
     };
   }
 
-  function renderExamGateStatus() {
-    const gateBox = $("candidateGateStatus");
-    if (!gateBox) return;
+  function syncExamTopupVisibility(activeSectionId) {
+    const topup = $("examStatusTopup");
+    if (!topup) return;
+    const sectionId = activeSectionId || (["welcomePanel","examPanel","resultPanel","adminPanel"].find(id => !$(id).classList.contains("hidden")) || "welcomePanel");
+    topup.classList.toggle("hidden", sectionId !== "welcomePanel");
+  }
+
+  function updateExamStatusTopup() {
+    const topup = $("examStatusTopup");
+    const title = $("examStatusTopupTitle");
+    const desc = $("examStatusTopupDesc");
+    if (!topup || !title || !desc) return;
 
     const status = getExamWindowStatus();
+    const isOpen = status.allowLogin;
+    topup.classList.remove("open", "closed");
+    topup.classList.add(isOpen ? "open" : "closed");
+    title.textContent = isOpen ? "ĐANG MỞ THI" : "CHƯA MỞ THI";
+    desc.textContent = status.message;
+  }
+
+  function renderExamGateStatus() {
+    const gateBox = $("candidateGateStatus");
+    const status = getExamWindowStatus();
+    updateExamStatusTopup();
+
+    if (!gateBox) {
+      const gateSummary = $("gateSummary");
+      if (gateSummary) {
+        const cfg = normalizeExamWindow(state.examWindow);
+        if (!cfg.enabled || !cfg.start || !cfg.end) {
+          gateSummary.innerHTML = "<b>Trạng thái hiện tại:</b> Chưa mở thi.";
+        } else {
+          gateSummary.innerHTML =
+            "<b>Trạng thái hiện tại:</b> " + (status.allowLogin ? "Đang mở thi" : "Chưa cho đăng nhập") + "<br>" +
+            "<b>Từ:</b> " + escapeHtml(formatDateTime(cfg.start)) + "<br>" +
+            "<b>Đến:</b> " + escapeHtml(formatDateTime(cfg.end)) +
+            (cfg.updatedAt ? "<br><b>Cập nhật lúc:</b> " + escapeHtml(formatDateTime(cfg.updatedAt)) : "");
+        }
+      }
+      return;
+    }
     gateBox.textContent = status.message;
     gateBox.className = "status " + (status.allowLogin ? "success" : (status.phase === "pending" ? "info" : "warning"));
 
@@ -1568,6 +1649,7 @@
   });
 
   setWelcomeIllustration("ready");
+  syncExamTopupVisibility("welcomePanel");
   renderTimer();
   renderExamGateStatus();
   fetchExamWindowConfig(true);
