@@ -629,7 +629,6 @@
                 <thead>
                   <tr>
                     <th>STT</th>
-                    <th>Câu hỏi</th>
                     <th>Đáp án chọn</th>
                     <th>Đáp án đúng</th>
                     <th>Kết quả</th>
@@ -640,7 +639,6 @@
             </div>
 
             <div class="flex" style="margin-top:16px">
-              <button id="btnNewAttempt">Làm bài mới</button>
               <button id="btnBackHomeFromResult" class="secondary">Về trang đầu</button>
             </div>
           </div>
@@ -1233,6 +1231,103 @@
     return (Number(correctCount || 0) * POINTS_PER_CORRECT).toFixed(1);
   }
 
+  function getFirstNonEmptyValue(obj, keys) {
+    if (!obj || typeof obj !== "object") return "";
+    for (const key of keys) {
+      if (Object.prototype.hasOwnProperty.call(obj, key)) {
+        const value = obj[key];
+        if (value !== undefined && value !== null && String(value).trim() !== "") {
+          return value;
+        }
+      }
+    }
+    return "";
+  }
+
+  function parseFlexibleNumber(value) {
+    if (typeof value === "number") {
+      return Number.isFinite(value) ? value : null;
+    }
+    if (value === undefined || value === null) return null;
+    const raw = String(value).trim();
+    if (!raw) return null;
+
+    const normalized = raw
+      .replace(/\s+/g, "")
+      .replace(/%/g, "")
+      .replace(/,/g, ".");
+
+    const match = normalized.match(/-?\d+(?:\.\d+)?/);
+    if (!match) return null;
+
+    const parsed = Number(match[0]);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+
+  function normalizeAdminRow(row) {
+    const totalRaw = parseFlexibleNumber(getFirstNonEmptyValue(row, [
+      "total", "questionCount", "totalQuestions", "tongCau", "soCau", "Tổng câu", "question_count"
+    ]));
+    const total = Math.max(1, Math.round(totalRaw || QUESTIONS_PER_EXAM));
+
+    const explicitCorrect = parseFlexibleNumber(getFirstNonEmptyValue(row, [
+      "correctCount", "correctAnswers", "soCauDung", "rawScore", "scoreRaw", "Số câu đúng"
+    ]));
+    const explicitConverted = parseFlexibleNumber(getFirstNonEmptyValue(row, [
+      "convertedScore", "point", "points", "diem", "Điểm"
+    ]));
+    const explicitPercent = parseFlexibleNumber(getFirstNonEmptyValue(row, [
+      "percent", "percentage", "tyLe", "tỷ lệ", "Tỷ lệ"
+    ]));
+    const genericScore = parseFlexibleNumber(getFirstNonEmptyValue(row, [
+      "score", "resultScore", "ketQua", "kết quả"
+    ]));
+
+    let correctCount = explicitCorrect;
+
+    if (correctCount === null && explicitConverted !== null) {
+      correctCount = Math.round(explicitConverted / POINTS_PER_CORRECT);
+    }
+
+    if (correctCount === null && genericScore !== null) {
+      const scoreFieldText = String(getFirstNonEmptyValue(row, ["score", "resultScore", "ketQua", "kết quả"]));
+
+      if (explicitPercent !== null) {
+        const percentFromCorrect = total ? (genericScore / total) * 100 : 0;
+        const percentFromConverted = total ? (genericScore / (total * POINTS_PER_CORRECT)) * 100 : 0;
+        const diffCorrect = Math.abs(percentFromCorrect - explicitPercent);
+        const diffConverted = Math.abs(percentFromConverted - explicitPercent);
+        correctCount = diffConverted + 0.01 < diffCorrect
+          ? Math.round(genericScore / POINTS_PER_CORRECT)
+          : Math.round(genericScore);
+      } else if (scoreFieldText.includes(".") || !Number.isInteger(genericScore)) {
+        correctCount = Math.round(genericScore / POINTS_PER_CORRECT);
+      } else if (genericScore <= total * POINTS_PER_CORRECT) {
+        correctCount = Math.round(genericScore / POINTS_PER_CORRECT);
+      } else {
+        correctCount = Math.round(genericScore);
+      }
+    }
+
+    correctCount = Math.min(total, Math.max(0, Math.round(correctCount || 0)));
+    const convertedScore = Number((correctCount * POINTS_PER_CORRECT).toFixed(1));
+    const percent = total ? Number(((correctCount / total) * 100).toFixed(2)) : 0;
+
+    return {
+      submittedAt: getFirstNonEmptyValue(row, ["submittedAt", "timestamp", "time", "Thời gian nộp"]),
+      fullName: getFirstNonEmptyValue(row, ["fullName", "name", "hoTen", "Họ và tên"]),
+      unit: getFirstNonEmptyValue(row, ["unit", "donVi", "Đơn vị"]),
+      position: getFirstNonEmptyValue(row, ["position", "chucVu", "Chức vụ"]),
+      score: convertedScore,
+      correctCount,
+      total,
+      percent,
+      usedSeconds: parseFlexibleNumber(getFirstNonEmptyValue(row, ["usedSeconds", "durationSeconds", "seconds"])) || 0,
+      usedTimeText: getFirstNonEmptyValue(row, ["usedTimeText", "durationText", "Thời gian làm bài"]),
+      raw: row
+    };
+  }
+
   async function sendResultToServer(payload) {
     if (!SCRIPT_URL || SCRIPT_URL.includes("PASTE_YOUR")) {
       return { ok: false, message: "Chưa cấu hình SCRIPT_URL." };
@@ -1314,7 +1409,6 @@
       const tr = document.createElement("tr");
       tr.innerHTML = `
         <td>${row.stt}</td>
-        <td>${escapeHtml(row.question)}</td>
         <td>${escapeHtml(row.selected || "Chưa chọn")}</td>
         <td>${escapeHtml(row.correct)}</td>
         <td>${row.result}</td>
@@ -1403,8 +1497,9 @@
       const resp = await fetch(url);
       const data = await resp.json();
       const rows = Array.isArray(data.rows) ? data.rows : [];
-      state.adminRows = rows;
-      renderAdminRows(rows);
+      const normalizedRows = rows.map(normalizeAdminRow);
+      state.adminRows = normalizedRows;
+      renderAdminRows(normalizedRows);
     } catch (err) {
       console.error(err);
       alert("Không tải được kết quả tổng hợp. Kiểm tra lại Apps Script hoặc quyền triển khai Web App.");
@@ -1424,17 +1519,17 @@
       return;
     }
 
-    const sorted = [...rows].sort((a,b) => new Date(b.submittedAt || 0) - new Date(a.submittedAt || 0));
+    const sorted = [...rows].sort((a, b) => new Date(b.submittedAt || 0) - new Date(a.submittedAt || 0));
 
     let totalScore = 0;
     let max = -Infinity;
     let min = Infinity;
 
     sorted.forEach((row, idx) => {
-      const score = Number(row.score || 0);
+      const convertedScore = Number(row.score || 0);
+      const correctCount = Number(row.correctCount || 0);
       const total = Number(row.total || QUESTIONS_PER_EXAM) || QUESTIONS_PER_EXAM;
-      const percent = total ? ((score / total) * 100) : 0;
-      const convertedScore = Number(row.convertedScore ?? formatConvertedScore(score));
+      const percent = Number(row.percent || 0);
 
       totalScore += convertedScore;
       max = Math.max(max, convertedScore);
@@ -1447,7 +1542,7 @@
         <td>${escapeHtml(row.fullName || "")}</td>
         <td>${escapeHtml(row.unit || "")}</td>
         <td>${convertedScore.toFixed(1)}</td>
-        <td>${score}/${total}</td>
+        <td>${correctCount}/${total}</td>
         <td>${percent.toFixed(2)}%</td>
         <td>${escapeHtml(row.usedTimeText || formatSeconds(Number(row.usedSeconds || 0)))}</td>
       `;
@@ -1476,17 +1571,17 @@
     const lines = [headers.join(",")];
 
     state.adminRows.forEach((row, idx) => {
-      const score = Number(row.score || 0);
+      const convertedScore = Number(row.score || 0);
+      const correctCount = Number(row.correctCount || 0);
       const total = Number(row.total || QUESTIONS_PER_EXAM);
-      const percent = total ? ((score / total) * 100).toFixed(2) + "%" : "0%";
-      const convertedScore = Number(row.convertedScore ?? formatConvertedScore(score));
+      const percent = Number(row.percent || 0).toFixed(2) + "%";
       const values = [
         idx + 1,
         csvSafe(formatDateTime(row.submittedAt)),
         csvSafe(row.fullName || ""),
         csvSafe(row.unit || ""),
         convertedScore.toFixed(1),
-        score,
+        correctCount,
         total,
         percent,
         csvSafe(row.usedTimeText || formatSeconds(Number(row.usedSeconds || 0)))
@@ -1557,18 +1652,6 @@
   });
 
   $("btnSubmitExam").addEventListener("click", () => submitExam(false));
-
-  $("btnNewAttempt").addEventListener("click", () => {
-    $("fullName").value = "";
-    $("position").value = "";
-    $("unit").value = "";
-    resetSidePanels();
-    updateMain("Thông tin thí sinh", "Nhập thông tin trước khi bắt đầu làm bài.");
-    setWelcomeIllustration("candidate");
-    showOnly("welcomePanel");
-    $("roleList").classList.add("hidden");
-    $("candidateForm").classList.remove("hidden");
-  });
 
   $("btnBackHomeFromResult").addEventListener("click", () => {
     $("fullName").value = "";
