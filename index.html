@@ -1222,9 +1222,37 @@
   }
 
   function formatSeconds(seconds) {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
+    const safeSeconds = Math.max(0, Math.round(Number(seconds) || 0));
+    const mins = Math.floor(safeSeconds / 60);
+    const secs = safeSeconds % 60;
     return String(mins).padStart(2, "0") + ":" + String(secs).padStart(2, "0");
+  }
+
+  function formatUsedSecondsText(seconds) {
+    const safeSeconds = Math.max(0, Math.round(Number(seconds) || 0));
+    return String(safeSeconds) + " giây";
+  }
+
+  function parseDurationToSeconds(value) {
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return Math.max(0, Math.round(value));
+    }
+    if (value === undefined || value === null) return null;
+
+    const raw = String(value).trim();
+    if (!raw) return null;
+
+    const colonMatch = raw.match(/^(\d+):(\d{1,2})$/);
+    if (colonMatch) {
+      return Number(colonMatch[1]) * 60 + Number(colonMatch[2]);
+    }
+
+    const giayMatch = raw.match(/(\d+)\s*gi(?:â|a)y/i);
+    if (giayMatch) {
+      return Number(giayMatch[1]);
+    }
+
+    return null;
   }
 
   function formatConvertedScore(correctCount) {
@@ -1387,7 +1415,11 @@
       correctCount,
       total,
       percent,
-      usedSeconds: parseFlexibleNumber(getFirstNonEmptyValue(row, ["usedSeconds", "durationSeconds", "seconds"])) || 0,
+      usedSeconds: (() => {
+        const explicitUsedSeconds = parseFlexibleNumber(getFirstNonEmptyValue(row, ["usedSeconds", "durationSeconds", "seconds"]));
+        if (explicitUsedSeconds !== null) return explicitUsedSeconds;
+        return parseDurationToSeconds(getFirstNonEmptyValue(row, ["usedTimeText", "durationText", "Thời gian làm bài"])) || 0;
+      })(),
       usedTimeText: getFirstNonEmptyValue(row, ["usedTimeText", "durationText", "Thời gian làm bài"]),
       raw: row
     };
@@ -1425,7 +1457,7 @@
       total,
       percent: Number(((score / total) * 100).toFixed(2)),
       usedSeconds,
-      usedTimeText: formatSeconds(usedSeconds),
+      usedTimeText: formatUsedSecondsText(usedSeconds),
       questionCount: total,
       answerDetails: detailRows
     };
@@ -1466,7 +1498,7 @@
     $("resultUnit").textContent = state.candidate.unit;
     $("resultPosition").textContent = state.candidate.position;
     $("resultScore").textContent = formatConvertedScore(score) + " điểm (" + score + "/" + total + " câu đúng)";
-    $("resultTime").textContent = formatSeconds(usedSeconds);
+    $("resultTime").textContent = formatUsedSecondsText(usedSeconds);
 
     const detailBody = $("resultDetailBody");
     detailBody.innerHTML = "";
@@ -1609,7 +1641,7 @@
         <td>${convertedScore.toFixed(1)}</td>
         <td>${correctCount}/${total}</td>
         <td>${percent.toFixed(2)}%</td>
-        <td>${escapeHtml(row.usedTimeText || formatSeconds(Number(row.usedSeconds || 0)))}</td>
+        <td>${escapeHtml(row.usedTimeText || formatUsedSecondsText(Number(row.usedSeconds || 0)))}</td>
       `;
       body.appendChild(tr);
     });
@@ -1649,7 +1681,7 @@
         correctCount,
         total,
         percent,
-        csvSafe(row.usedTimeText || formatSeconds(Number(row.usedSeconds || 0)))
+        csvSafe(row.usedTimeText || formatUsedSecondsText(Number(row.usedSeconds || 0)))
       ];
       lines.push(values.join(","));
     });
