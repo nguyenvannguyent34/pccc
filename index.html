@@ -201,6 +201,7 @@
       transition:.18s ease;
     }
     button:hover{background:var(--primary-dark)}
+    button:disabled{opacity:.55;cursor:not-allowed;filter:grayscale(.15);}
     button.secondary{
       background:#fff;
       color:var(--text);
@@ -363,6 +364,34 @@
       font-size:13px;
       color:#667085;
     }
+    .admin-gate-panel{
+      margin:14px 0 18px;
+      padding:16px;
+      border:1px solid #e4e9f1;
+      border-radius:16px;
+      background:#fbfcfe;
+    }
+    .admin-gate-grid{
+      display:grid;
+      grid-template-columns:repeat(2,minmax(0,1fr));
+      gap:12px;
+      margin-top:10px;
+    }
+    .admin-gate-actions{
+      display:flex;
+      gap:10px;
+      flex-wrap:wrap;
+      margin-top:14px;
+    }
+    .gate-summary{
+      margin-top:12px;
+      padding:12px 14px;
+      border-radius:12px;
+      background:#f8fafc;
+      border:1px solid #e1e7f0;
+      font-size:15px;
+      line-height:1.5;
+    }
 
     .welcome-illustration{
       width:100%;
@@ -461,6 +490,8 @@
               <option>Đội Chữa cháy và cứu nạn, cứu hộ khu vực 9</option>
               <option>Đội Chữa cháy và cứu nạn, cứu hộ khu vực 10</option>
             </select>
+
+            <div id="candidateGateStatus" class="status warning">Admin chưa mở lịch thi. Thí sinh chưa thể đăng nhập vào thi.</div>
 
             <div class="note-box tiny">
               Chúc các đồng chí thi tốt!
@@ -584,6 +615,31 @@
               </div>
             </div>
 
+            <div class="admin-gate-panel">
+              <h3 style="margin:0 0 6px;font-size:22px">Cài đặt thời gian mở thi</h3>
+              <div class="muted small">Admin thiết lập khoảng thời gian mở thi. Chỉ trong thời gian này thí sinh mới đăng nhập và bắt đầu thi được.</div>
+
+              <div class="admin-gate-grid">
+                <div>
+                  <label for="examOpenStart">Mở thi từ thời điểm</label>
+                  <input id="examOpenStart" type="datetime-local" />
+                </div>
+                <div>
+                  <label for="examOpenEnd">Đóng thi vào thời điểm</label>
+                  <input id="examOpenEnd" type="datetime-local" />
+                </div>
+              </div>
+
+              <div class="admin-gate-actions">
+                <button id="btnSaveExamWindow" class="warning">Lưu lịch mở thi</button>
+                <button id="btnOpenExamNow" class="success">Mở thi ngay</button>
+                <button id="btnCloseExamNow" class="danger">Đóng thi ngay</button>
+              </div>
+
+              <div id="adminGateSaveStatus" class="status info" style="margin-top:14px">Đang đọc trạng thái mở thi...</div>
+              <div id="gateSummary" class="gate-summary">Chưa có thông tin lịch mở thi.</div>
+            </div>
+
             <div class="summary-grid">
               <div class="summary-box">
                 <div class="label">Tổng số bài thi</div>
@@ -642,6 +698,7 @@
 
   const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxJ29Mp2uDDurchQAyGLQN7nAg3BApihF9gXHmq2QC-ra92nAToJ328OTYrt4tTSgH7Rg/exec";
   const ADMIN_PASSWORD = "101212019";
+  const EXAM_CONFIG_STORAGE_KEY = "pc07_exam_window_config";
 
   const state = {
     allQuestions: [],
@@ -653,7 +710,13 @@
     timerId: null,
     candidate: { fullName: "", unit: "", position: "" },
     submitted: false,
-    adminRows: []
+    adminRows: [],
+    examWindow: {
+      enabled: false,
+      start: "",
+      end: "",
+      updatedAt: ""
+    }
   };
 
   const $ = (id) => document.getElementById(id);
@@ -705,6 +768,238 @@
     }
     return a;
   }
+
+
+  function toLocalDateTimeValue(date) {
+    const d = date instanceof Date ? date : new Date(date);
+    if (isNaN(d)) return "";
+    const pad = (v) => String(v).padStart(2, "0");
+    return d.getFullYear() + "-" +
+      pad(d.getMonth() + 1) + "-" +
+      pad(d.getDate()) + "T" +
+      pad(d.getHours()) + ":" +
+      pad(d.getMinutes());
+  }
+
+  function parseLocalDateTime(value) {
+    if (!value) return null;
+    const d = new Date(value);
+    return isNaN(d) ? null : d;
+  }
+
+  function readLocalExamWindow() {
+    try {
+      const raw = localStorage.getItem(EXAM_CONFIG_STORAGE_KEY);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      if (!parsed || typeof parsed !== "object") return null;
+      return {
+        enabled: Boolean(parsed.enabled),
+        start: parsed.start || "",
+        end: parsed.end || "",
+        updatedAt: parsed.updatedAt || ""
+      };
+    } catch (err) {
+      console.warn("Không đọc được cấu hình mở thi cục bộ:", err);
+      return null;
+    }
+  }
+
+  function saveLocalExamWindow(config) {
+    try {
+      localStorage.setItem(EXAM_CONFIG_STORAGE_KEY, JSON.stringify(config));
+    } catch (err) {
+      console.warn("Không lưu được cấu hình mở thi cục bộ:", err);
+    }
+  }
+
+  function normalizeExamWindow(config) {
+    const fallback = { enabled: false, start: "", end: "", updatedAt: "" };
+    if (!config || typeof config !== "object") return fallback;
+    return {
+      enabled: Boolean(config.enabled),
+      start: config.start || "",
+      end: config.end || "",
+      updatedAt: config.updatedAt || ""
+    };
+  }
+
+  function getExamWindowStatus() {
+    const config = normalizeExamWindow(state.examWindow);
+    if (!config.enabled || !config.start || !config.end) {
+      return {
+        allowLogin: false,
+        phase: "closed",
+        message: "Admin chưa mở lịch thi. Thí sinh chưa thể đăng nhập vào thi."
+      };
+    }
+
+    const now = new Date();
+    const start = new Date(config.start);
+    const end = new Date(config.end);
+
+    if (isNaN(start) || isNaN(end) || end <= start) {
+      return {
+        allowLogin: false,
+        phase: "invalid",
+        message: "Lịch mở thi chưa hợp lệ. Vui lòng liên hệ Admin."
+      };
+    }
+
+    if (now < start) {
+      return {
+        allowLogin: false,
+        phase: "pending",
+        message: "Chưa đến thời gian mở thi. Thời gian mở: " + formatDateTime(start.toISOString()) + " đến " + formatDateTime(end.toISOString()) + "."
+      };
+    }
+
+    if (now > end) {
+      return {
+        allowLogin: false,
+        phase: "ended",
+        message: "Đã hết thời gian mở thi. Khung giờ thi: " + formatDateTime(start.toISOString()) + " đến " + formatDateTime(end.toISOString()) + "."
+      };
+    }
+
+    return {
+      allowLogin: true,
+      phase: "open",
+      message: "Đang trong thời gian mở thi: " + formatDateTime(start.toISOString()) + " đến " + formatDateTime(end.toISOString()) + "."
+    };
+  }
+
+  function renderExamGateStatus() {
+    const gateBox = $("candidateGateStatus");
+    if (!gateBox) return;
+
+    const status = getExamWindowStatus();
+    gateBox.textContent = status.message;
+    gateBox.className = "status " + (status.allowLogin ? "success" : (status.phase === "pending" ? "info" : "warning"));
+
+    const startBtn = $("btnStartExam");
+    if (startBtn) startBtn.disabled = !status.allowLogin;
+
+    const gateSummary = $("gateSummary");
+    if (gateSummary) {
+      const cfg = normalizeExamWindow(state.examWindow);
+      if (!cfg.enabled || !cfg.start || !cfg.end) {
+        gateSummary.innerHTML = "<b>Trạng thái hiện tại:</b> Chưa mở thi.";
+      } else {
+        gateSummary.innerHTML =
+          "<b>Trạng thái hiện tại:</b> " + (status.allowLogin ? "Đang mở thi" : "Chưa cho đăng nhập") + "<br>" +
+          "<b>Từ:</b> " + escapeHtml(formatDateTime(cfg.start)) + "<br>" +
+          "<b>Đến:</b> " + escapeHtml(formatDateTime(cfg.end)) +
+          (cfg.updatedAt ? "<br><b>Cập nhật lúc:</b> " + escapeHtml(formatDateTime(cfg.updatedAt)) : "");
+      }
+    }
+  }
+
+  function fillAdminExamWindowForm() {
+    const cfg = normalizeExamWindow(state.examWindow);
+    const startInput = $("examOpenStart");
+    const endInput = $("examOpenEnd");
+    if (startInput) startInput.value = cfg.start ? toLocalDateTimeValue(cfg.start) : "";
+    if (endInput) endInput.value = cfg.end ? toLocalDateTimeValue(cfg.end) : "";
+  }
+
+  async function fetchExamWindowConfig(silent = false) {
+    const localConfig = readLocalExamWindow();
+    if (localConfig) {
+      state.examWindow = normalizeExamWindow(localConfig);
+      renderExamGateStatus();
+      fillAdminExamWindowForm();
+    }
+
+    if (!SCRIPT_URL || SCRIPT_URL.includes("PASTE_YOUR")) {
+      if (!silent) {
+        const box = $("adminGateSaveStatus");
+        if (box) {
+          box.className = "status warning";
+          box.textContent = "Chưa cấu hình SCRIPT_URL nên chỉ đọc được trạng thái cục bộ trên máy hiện tại.";
+        }
+      }
+      return state.examWindow;
+    }
+
+    try {
+      const url = SCRIPT_URL + (SCRIPT_URL.includes("?") ? "&" : "?") + "action=getConfig&_ts=" + Date.now();
+      const resp = await fetch(url);
+      const data = await resp.json();
+      if (data && data.ok && data.config) {
+        state.examWindow = normalizeExamWindow(data.config);
+        saveLocalExamWindow(state.examWindow);
+        renderExamGateStatus();
+        fillAdminExamWindowForm();
+        if (!silent) {
+          const box = $("adminGateSaveStatus");
+          if (box) {
+            box.className = "status success";
+            box.textContent = "Đã đồng bộ trạng thái mở thi từ hệ thống.";
+          }
+        }
+      }
+      return state.examWindow;
+    } catch (err) {
+      console.error("Không tải được cấu hình mở thi:", err);
+      if (!silent) {
+        const box = $("adminGateSaveStatus");
+        if (box) {
+          box.className = "status warning";
+          box.textContent = "Không tải được cấu hình mở thi từ hệ thống, đang dùng dữ liệu cục bộ gần nhất.";
+        }
+      }
+      return state.examWindow;
+    }
+  }
+
+  async function saveExamWindowConfig(config) {
+    state.examWindow = normalizeExamWindow(config);
+    saveLocalExamWindow(state.examWindow);
+    renderExamGateStatus();
+    fillAdminExamWindowForm();
+
+    const statusBox = $("adminGateSaveStatus");
+    if (statusBox) {
+      statusBox.className = "status info";
+      statusBox.textContent = "Đang lưu lịch mở thi...";
+    }
+
+    if (!SCRIPT_URL || SCRIPT_URL.includes("PASTE_YOUR")) {
+      if (statusBox) {
+        statusBox.className = "status warning";
+        statusBox.textContent = "Đã lưu cục bộ trên máy này. Muốn áp dụng cho mọi thí sinh, cần bổ sung Apps Script action getConfig/saveConfig.";
+      }
+      return { ok: false, localOnly: true };
+    }
+
+    try {
+      const resp = await fetch(SCRIPT_URL, {
+        method: "POST",
+        body: JSON.stringify({ action: "saveConfig", config: state.examWindow }),
+        headers: { "Content-Type": "text/plain;charset=utf-8" }
+      });
+      const data = await resp.json().catch(() => ({ ok: true }));
+      if (data && data.ok) {
+        if (statusBox) {
+          statusBox.className = "status success";
+          statusBox.textContent = "Đã lưu lịch mở thi thành công.";
+        }
+      } else if (statusBox) {
+        statusBox.className = "status warning";
+        statusBox.textContent = "Đã lưu cục bộ nhưng chưa lưu được lên hệ thống. Kiểm tra Apps Script action saveConfig/getConfig.";
+      }
+      return data;
+    } catch (err) {
+      console.error("Không lưu được cấu hình mở thi:", err);
+      if (statusBox) {
+        statusBox.className = "status warning";
+        statusBox.textContent = "Đã lưu cục bộ nhưng chưa lưu được lên hệ thống: " + (err.message || "Lỗi chưa xác định") + ".";
+      }
+      return { ok: false, message: err.message || "Không lưu được cấu hình" };
+    }
+  }
+
 
   async function loadQuestionsFromExcel() {
     try {
@@ -978,6 +1273,14 @@
   }
 
   async function startExam() {
+    await fetchExamWindowConfig(true);
+    const gateStatus = getExamWindowStatus();
+    if (!gateStatus.allowLogin) {
+      alert(gateStatus.message);
+      renderExamGateStatus();
+      return;
+    }
+
     const fullName = $("fullName").value.trim();
     const position = $("position").value.trim();
     const unit = $("unit").value.trim();
@@ -1124,12 +1427,14 @@
     return '"' + v + '"';
   }
 
-  $("btnCandidateMode").addEventListener("click", () => {
+  $("btnCandidateMode").addEventListener("click", async () => {
+    await fetchExamWindowConfig(true);
     $("roleList").classList.add("hidden");
     $("candidateForm").classList.remove("hidden");
     updateMain("Thông tin thí sinh", "Nhập thông tin trước khi bắt đầu làm bài.");
     setWelcomeIllustration("candidate");
     showOnly("welcomePanel");
+    renderExamGateStatus();
   });
 
   $("btnAdminMode").addEventListener("click", () => {
@@ -1202,11 +1507,57 @@
     }
     updateMain("Bảng tổng hợp kết quả", "Đang tải kết quả bài thi của thí sinh...");
     showOnly("adminPanel");
+    await fetchExamWindowConfig();
     await fetchAdminResults();
   });
 
   $("btnRefreshResults").addEventListener("click", fetchAdminResults);
   $("btnExportCsv").addEventListener("click", exportAdminCsv);
+
+  $("btnSaveExamWindow").addEventListener("click", async () => {
+    const startValue = $("examOpenStart").value;
+    const endValue = $("examOpenEnd").value;
+    const start = parseLocalDateTime(startValue);
+    const end = parseLocalDateTime(endValue);
+
+    if (!startValue || !endValue || !start || !end) {
+      alert("Vui lòng nhập đầy đủ thời điểm mở thi và đóng thi.");
+      return;
+    }
+    if (end <= start) {
+      alert("Thời điểm đóng thi phải sau thời điểm mở thi.");
+      return;
+    }
+
+    await saveExamWindowConfig({
+      enabled: true,
+      start: start.toISOString(),
+      end: end.toISOString(),
+      updatedAt: new Date().toISOString()
+    });
+  });
+
+  $("btnOpenExamNow").addEventListener("click", async () => {
+    const now = new Date();
+    const end = new Date(now.getTime() + (EXAM_TIME_MINUTES + 10) * 60 * 1000);
+    await saveExamWindowConfig({
+      enabled: true,
+      start: now.toISOString(),
+      end: end.toISOString(),
+      updatedAt: now.toISOString()
+    });
+  });
+
+  $("btnCloseExamNow").addEventListener("click", async () => {
+    const ok = confirm("Bạn chắc chắn muốn đóng thi ngay?");
+    if (!ok) return;
+    await saveExamWindowConfig({
+      enabled: false,
+      start: "",
+      end: "",
+      updatedAt: new Date().toISOString()
+    });
+  });
 
   $("btnLogoutAdmin").addEventListener("click", () => {
     $("adminPassword").value = "";
@@ -1218,6 +1569,11 @@
 
   setWelcomeIllustration("ready");
   renderTimer();
+  renderExamGateStatus();
+  fetchExamWindowConfig(true);
+  setInterval(() => {
+    renderExamGateStatus();
+  }, 30000);
   loadQuestionsFromExcel();
 })();
 </script>
