@@ -558,6 +558,33 @@
       align-items:center;
       margin-bottom:10px;
     }
+    .admin-shell{display:grid;gap:16px}
+    .admin-nav{
+      display:grid;
+      grid-template-columns:repeat(3,minmax(0,1fr));
+      gap:12px;
+      margin:14px 0 18px;
+    }
+    .admin-tab-btn{
+      text-align:left;
+      padding:16px 18px;
+      border-radius:16px;
+      border:1px solid #d9e1ec;
+      background:#fff;
+      color:var(--text);
+      box-shadow:0 6px 18px rgba(16,24,40,.04);
+    }
+    .admin-tab-btn:hover{background:#fff8f8;border-color:#d9b9b9}
+    .admin-tab-btn.active{
+      background:linear-gradient(90deg, var(--primary-dark), var(--primary));
+      color:#fff;
+      border-color:transparent;
+      box-shadow:0 14px 28px rgba(125,16,16,.18);
+    }
+    .admin-tab-btn strong{display:block;font-size:18px;margin-bottom:4px}
+    .admin-tab-btn span{display:block;font-size:13px;line-height:1.45;opacity:.95}
+    .admin-tab-panel{display:none}
+    .admin-tab-panel.active{display:block}
 
     .resume-box{
       margin-top:14px;
@@ -575,10 +602,69 @@
       text-shadow:0 2px 6px rgba(0,0,0,.45);
     }
 
+    .toast-container{
+      position:fixed;
+      right:20px;
+      bottom:20px;
+      z-index:1600;
+      display:flex;
+      flex-direction:column;
+      gap:12px;
+      pointer-events:none;
+      max-width:min(420px,calc(100vw - 32px));
+    }
+    .toast{
+      pointer-events:auto;
+      display:flex;
+      gap:12px;
+      align-items:flex-start;
+      padding:14px 16px;
+      border-radius:16px;
+      background:rgba(17,24,39,.96);
+      color:#fff;
+      border:1px solid rgba(255,255,255,.12);
+      box-shadow:0 18px 40px rgba(0,0,0,.28);
+      backdrop-filter:blur(8px);
+      transform:translateY(12px);
+      opacity:0;
+      animation:toastIn .22s ease forwards;
+      overflow:hidden;
+    }
+    .toast::before{
+      content:"";
+      display:block;
+      width:5px;
+      align-self:stretch;
+      border-radius:999px;
+      background:#8ea5ff;
+      flex:0 0 auto;
+    }
+    .toast.success::before{background:#32d583}
+    .toast.warning::before{background:#fdb022}
+    .toast.error::before{background:#f97066}
+    .toast.info::before{background:#7cd4fd}
+    .toast-body{min-width:0;flex:1}
+    .toast-title{font-size:15px;font-weight:700;line-height:1.25;margin-bottom:3px}
+    .toast-message{font-size:14px;line-height:1.45;opacity:.98;word-break:break-word}
+    .toast-close{
+      border:none;
+      background:transparent;
+      color:rgba(255,255,255,.8);
+      font-size:20px;
+      line-height:1;
+      cursor:pointer;
+      padding:0 0 0 6px;
+      align-self:flex-start;
+    }
+    .toast-close:hover{color:#fff;background:transparent}
+    .toast.removing{animation:toastOut .18s ease forwards}
+    @keyframes toastIn{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+    @keyframes toastOut{from{opacity:1;transform:translateY(0)}to{opacity:0;transform:translateY(10px)}}
+
     @media (max-width:1200px){
       .info-cards{grid-template-columns:repeat(2,minmax(0,1fr))}
       .summary-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
-      .result-layout,.welcome-shell{grid-template-columns:1fr}
+      .result-layout,.welcome-shell,.admin-nav{grid-template-columns:1fr}
       .filter-grid,.setting-grid,.section-grid-4{grid-template-columns:repeat(2,minmax(0,1fr))}
     }
     @media (max-width:980px){
@@ -622,7 +708,6 @@
     </div>
     <div class="topbar-title">
       <h1>KIỂM TRA TRỰC TUYẾN NGHIỆP VỤ CÁN BỘ KIỂM TRA PCCC</h1>
-      <div class="sub">Hệ thống kiểm tra chuyên nghiệp, hỗ trợ cấu hình đề thi, khôi phục bài làm và tổng hợp phân tích kết quả</div>
     </div>
   </div>
 
@@ -640,28 +725,15 @@
           <div class="role-list" id="roleList">
             <button class="role-btn" id="btnCandidateMode">
               <strong>Thí sinh</strong>
-              <span class="muted">Nhập họ tên, đơn vị, chức vụ và bắt đầu làm bài thi.</span>
             </button>
 
             <button class="role-btn" id="btnAdminMode">
               <strong>Admin</strong>
-              <span class="muted">Cấu hình kỳ thi, theo dõi kết quả, lọc dữ liệu và phân tích chất lượng câu hỏi.</span>
             </button>
           </div>
 
           <div id="candidateForm" class="hidden">
             <div id="candidateGateStatus" class="status info">Đang kiểm tra trạng thái mở thi...</div>
-
-            <label for="fullName">Họ và tên</label>
-            <input id="fullName" type="text" placeholder="Nhập họ và tên" />
-
-            <label for="position">Chức vụ</label>
-            <select id="position">
-              <option value="">-- Chọn chức vụ --</option>
-              <option>Cán bộ</option>
-              <option>Phó Đội trưởng</option>
-              <option>Đội trưởng</option>
-            </select>
 
             <label for="unit">Đơn vị</label>
             <select id="unit">
@@ -680,8 +752,20 @@
               <option>Đội Chữa cháy và cứu nạn, cứu hộ khu vực 10</option>
             </select>
 
+            <label for="candidateNameSelect">Danh sách thí sinh</label>
+            <select id="candidateNameSelect">
+              <option value="">-- Chọn đơn vị trước --</option>
+            </select>
+
+            <input id="fullName" type="hidden" />
+            <input id="position" type="hidden" />
+
+            <div id="candidateRosterStatus" class="status neutral">
+              Admin cần nhập danh sách thí sinh theo đơn vị. Sau đó thí sinh chỉ cần chọn đơn vị và chọn tên để vào thi.
+            </div>
+
             <div class="note-box tiny">
-              Lưu ý: nhấn <b>Enter</b> để bắt đầu thi. Trong quá trình làm bài có hỗ trợ tự lưu trạng thái, đánh dấu xem lại và toàn màn hình.
+              Lưu ý: nhấn <b>Enter</b> để bắt đầu thi sau khi đã chọn đơn vị và tên. Trong quá trình làm bài có hỗ trợ tự lưu trạng thái và đánh dấu xem lại.
             </div>
 
             <div id="resumeExamBox" class="resume-box hidden"></div>
@@ -699,7 +783,6 @@
               <button id="btnAdminLogin">Đăng nhập</button>
               <button id="btnBackFromAdmin" class="secondary">Quay lại</button>
             </div>
-            <div class="footer-note">Có thể nhấn <b>Enter</b> để đăng nhập admin.</div>
           </div>
         </div>
       </div>
@@ -736,11 +819,9 @@
               <div class="stat-pills">
                 <div class="stat-pill">Chưa trả lời: <b id="blankCounter">0</b></div>
                 <div class="stat-pill">Đúng điều kiện nộp: <b id="readySubmitState">Chưa</b></div>
-                <div class="stat-pill">Chế độ: <b id="fullscreenState">Cửa sổ thường</b></div>
-              </div>
+                              </div>
               <div class="action-row">
-                <button id="btnFullscreenToggle" class="secondary">Toàn màn hình</button>
-                <button id="btnToggleFlag" class="warning">Đánh dấu xem lại</button>
+                                <button id="btnToggleFlag" class="warning">Đánh dấu xem lại</button>
                 <button id="btnJumpUnanswered" class="secondary">Đến câu chưa làm</button>
                 <button id="btnJumpFlagged" class="secondary">Đến câu đánh dấu</button>
               </div>
@@ -868,209 +949,364 @@
 
           <div id="adminPanel" class="hidden">
             <div class="panel-title-row">
-              <div>
-                <h3 style="margin:0;font-size:24px">Bảng tổng hợp kết quả</h3>
-                <div class="muted small">Admin có thể cấu hình kỳ thi, lọc dữ liệu, xuất báo cáo và xem phân tích câu hỏi.</div>
-              </div>
+              <div></div>
               <div class="action-row">
-                <button id="btnRefreshResults">Làm mới</button>
-                <button id="btnExportCsv" class="secondary">Xuất CSV</button>
                 <button id="btnExportExcel" class="secondary">Xuất Excel</button>
                 <button id="btnPrintAdmin" class="secondary">In tổng hợp</button>
                 <button id="btnLogoutAdmin" class="secondary">Đăng xuất</button>
               </div>
             </div>
 
-            <div class="admin-gate-panel">
-              <h3 style="margin:0 0 6px;font-size:22px">Cài đặt kỳ kiểm tra</h3>
-              <div class="muted small">Thiết lập số câu hỏi, thời gian làm bài, điểm đạt, chế độ toàn màn hình và cơ cấu nhóm câu hỏi.</div>
-
-              <div class="setting-grid">
-                <div>
-                  <label for="settingQuestionCount">Số câu hỏi</label>
-                  <input id="settingQuestionCount" type="number" min="1" value="20" />
-                </div>
-                <div>
-                  <label for="settingTimeMinutes">Thời gian (phút)</label>
-                  <input id="settingTimeMinutes" type="number" min="1" value="15" />
-                </div>
-                <div>
-                  <label for="settingPassScore">Điểm đạt</label>
-                  <input id="settingPassScore" type="number" min="0" step="0.5" value="5" />
-                </div>
-                <div>
-                  <label for="settingFullscreenOnStart">Chế độ khi bắt đầu thi</label>
-                  <select id="settingFullscreenOnStart">
-                    <option value="yes">Đề nghị toàn màn hình</option>
-                    <option value="no">Giữ cửa sổ thường</option>
-                  </select>
-                </div>
-              </div>
-
-              <div class="section-card">
-                <div class="panel-title-row">
-                  <h4 style="margin:0">Cơ cấu đề theo nhóm kiến thức</h4>
-                  <div class="action-row">
-                    <button id="btnAutoDistribute" class="secondary">Chia đều tự động</button>
-                    <button id="btnClearDistribution" class="secondary">Xóa cơ cấu</button>
-                  </div>
-                </div>
-                <div class="muted small">Nếu tổng các nhóm bằng số câu hỏi, hệ thống sẽ bốc đề đúng cơ cấu. Nếu để trống hoặc không khớp, hệ thống tự bốc ngẫu nhiên toàn bộ ngân hàng câu hỏi.</div>
-                <div id="distributionSummary" class="status neutral" style="margin-top:12px">Chưa cấu hình cơ cấu nhóm câu hỏi.</div>
-                <div id="distributionGrid" class="distribution-grid"></div>
-              </div>
-
-              <div class="section-card" style="margin-top:14px">
-                <h4 style="margin:0 0 6px">Cài đặt thời gian mở thi</h4>
-                <div class="muted small">Chỉ trong khoảng thời gian này thí sinh mới được đăng nhập và bắt đầu thi.</div>
-                <div class="admin-gate-grid">
-                  <div>
-                    <label for="examOpenStart">Mở thi từ thời điểm</label>
-                    <input id="examOpenStart" type="datetime-local" />
-                  </div>
-                  <div>
-                    <label for="examOpenEnd">Đóng thi vào thời điểm</label>
-                    <input id="examOpenEnd" type="datetime-local" />
-                  </div>
-                </div>
-                <div class="admin-gate-actions">
-                  <button id="btnSaveAllSettings" class="warning">Lưu toàn bộ cấu hình</button>
-                  <button id="btnOpenExamNow" class="success">Mở thi ngay</button>
-                  <button id="btnCloseExamNow" class="danger">Đóng thi ngay</button>
-                </div>
-                <div id="adminGateSaveStatus" class="status info" style="margin-top:14px">Đang đọc trạng thái mở thi...</div>
-                <div id="gateSummary" class="gate-summary">Chưa có thông tin lịch mở thi.</div>
-              </div>
+            <div class="admin-nav" id="adminNav">
+              <button type="button" class="admin-tab-btn active" data-admin-tab="structure">
+                <strong>Cấu trúc đề thi</strong>
+                <span>Số lượng câu hỏi, thời gian làm bài, cơ cấu chuyên đề và lịch mở thi.</span>
+              </button>
+              <button type="button" class="admin-tab-btn" data-admin-tab="roster">
+                <strong>Thí sinh dự thi</strong>
+                <span>Thêm, bớt và quản lý danh sách thí sinh theo từng đơn vị.</span>
+              </button>
+              <button type="button" class="admin-tab-btn" data-admin-tab="report">
+                <strong>Báo cáo</strong>
+                <span>Báo cáo chuyên cần, danh sách điểm và bộ lọc kết quả chi tiết.</span>
+              </button>
             </div>
 
-            <div class="section-card">
-              <h4 style="margin:0 0 6px">Bộ lọc kết quả</h4>
-              <div class="muted small">Lọc theo họ tên, đơn vị, chức vụ, ngày thi, khoảng điểm và trạng thái đạt/chưa đạt.</div>
-              <div class="filter-grid">
-                <div>
-                  <label for="filterKeyword">Tìm họ tên / đơn vị</label>
-                  <input id="filterKeyword" type="text" placeholder="Nhập từ khóa..." />
-                </div>
-                <div>
-                  <label for="filterUnit">Đơn vị</label>
-                  <select id="filterUnit"><option value="">-- Tất cả đơn vị --</option></select>
-                </div>
-                <div>
-                  <label for="filterPosition">Chức vụ</label>
-                  <select id="filterPosition"><option value="">-- Tất cả chức vụ --</option></select>
-                </div>
-                <div>
-                  <label for="filterPassStatus">Trạng thái</label>
-                  <select id="filterPassStatus">
-                    <option value="">-- Tất cả --</option>
-                    <option value="pass">Đạt</option>
-                    <option value="fail">Chưa đạt</option>
-                  </select>
-                </div>
-                <div>
-                  <label for="filterDateFrom">Từ ngày</label>
-                  <input id="filterDateFrom" type="date" />
-                </div>
-                <div>
-                  <label for="filterDateTo">Đến ngày</label>
-                  <input id="filterDateTo" type="date" />
-                </div>
-                <div>
-                  <label for="filterMinScore">Điểm từ</label>
-                  <input id="filterMinScore" type="number" min="0" step="0.5" placeholder="Ví dụ 5" />
-                </div>
-                <div>
-                  <label for="filterMaxScore">Điểm đến</label>
-                  <input id="filterMaxScore" type="number" min="0" step="0.5" placeholder="Ví dụ 10" />
-                </div>
-              </div>
-              <div class="action-row" style="margin-top:12px">
-                <button id="btnApplyFilters" class="secondary">Áp dụng lọc</button>
-                <button id="btnClearFilters" class="secondary">Xóa lọc</button>
-              </div>
-            </div>
+            <div class="admin-shell">
+              <div id="adminStructureSection" class="admin-tab-panel active">
+                <div class="admin-gate-panel" style="margin-top:0">
+                  <div class="setting-grid">
+                    <div>
+                      <label for="settingQuestionCount">Số câu hỏi</label>
+                      <input id="settingQuestionCount" type="number" min="1" value="20" />
+                    </div>
+                    <div>
+                      <label for="settingTimeMinutes">Thời gian (phút)</label>
+                      <input id="settingTimeMinutes" type="number" min="1" value="15" />
+                    </div>
+                    <div>
+                      <label for="settingPassScore">Mốc đạt tham khảo</label>
+                      <input id="settingPassScore" type="number" min="0" step="0.5" value="5" />
+                    </div>
+                  </div>
 
-            <div class="summary-grid">
-              <div class="summary-box">
-                <div class="label">Tổng số bài thi</div>
-                <div class="value" id="statTotal">0</div>
-              </div>
-              <div class="summary-box">
-                <div class="label">Điểm trung bình</div>
-                <div class="value" id="statAverage">0</div>
-              </div>
-              <div class="summary-box">
-                <div class="label">Điểm cao nhất</div>
-                <div class="value" id="statMax">0</div>
-              </div>
-              <div class="summary-box">
-                <div class="label">Điểm thấp nhất</div>
-                <div class="value" id="statMin">0</div>
-              </div>
-              <div class="summary-box">
-                <div class="label">Tỷ lệ đạt</div>
-                <div class="value" id="statPassRate">0%</div>
-              </div>
-            </div>
+                  <div class="status info" style="margin-top:12px">Phân loại mặc định theo điểm: <b>Dưới 5: Yếu</b> • <b>Từ 5 đến dưới 7: Trung bình</b> • <b>Từ 7 đến dưới 9: Khá</b> • <b>Từ 9 trở lên: Xuất sắc</b></div>
 
-            <div class="admin-panels">
-              <div class="result-card">
-                <div class="panel-title-row">
-                  <h4 style="margin:0">Danh sách kết quả</h4>
-                  <div class="muted small">Bảng dưới đây thay đổi theo bộ lọc đang áp dụng.</div>
-                </div>
-                <div class="table-wrap">
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>#</th>
-                        <th>Thời gian nộp</th>
-                        <th>Họ và tên</th>
-                        <th>Chức vụ</th>
-                        <th>Đơn vị</th>
-                        <th>Điểm</th>
-                        <th>Số câu đúng</th>
-                        <th>Tỷ lệ</th>
-                        <th>Kết quả</th>
-                        <th>Thời gian làm bài</th>
-                      </tr>
-                    </thead>
-                    <tbody id="adminResultBody"></tbody>
-                  </table>
+                  <div class="section-card">
+                    <div class="panel-title-row">
+                      <h4 style="margin:0">Cơ cấu đề theo nhóm kiến thức</h4>
+                      <div class="action-row">
+                        <button id="btnAutoDistribute" class="secondary">Chia đều tự động</button>
+                        <button id="btnClearDistribution" class="secondary">Xóa cơ cấu</button>
+                      </div>
+                    </div>
+                    <div class="muted small">Nếu tổng các nhóm bằng số câu hỏi, hệ thống sẽ bốc đề đúng cơ cấu. Nếu để trống hoặc không khớp, hệ thống tự bốc ngẫu nhiên toàn bộ ngân hàng câu hỏi.</div>
+                    <div id="distributionSummary" class="status neutral" style="margin-top:12px">Chưa cấu hình cơ cấu nhóm câu hỏi.</div>
+                    <div id="distributionGrid" class="distribution-grid"></div>
+                  </div>
+
+                  <div class="section-card" style="margin-top:14px">
+                    <h4 style="margin:0 0 6px">Lịch mở thi</h4>
+                    <div class="muted small">Chỉ trong khoảng thời gian này thí sinh mới được đăng nhập và bắt đầu thi.</div>
+                    <div class="admin-gate-grid">
+                      <div>
+                        <label for="examOpenStart">Mở thi từ thời điểm</label>
+                        <input id="examOpenStart" type="datetime-local" />
+                      </div>
+                      <div>
+                        <label for="examOpenEnd">Đóng thi vào thời điểm</label>
+                        <input id="examOpenEnd" type="datetime-local" />
+                      </div>
+                    </div>
+                    <div class="admin-gate-actions">
+                      <button id="btnSaveAllSettings" class="warning">Lưu toàn bộ cấu hình</button>
+                      <button id="btnOpenExamNow" class="success">Mở thi ngay</button>
+                      <button id="btnCloseExamNow" class="danger">Đóng thi ngay</button>
+                    </div>
+                    <div id="adminGateSaveStatus" class="status info" style="margin-top:14px">Đang đọc trạng thái mở thi...</div>
+                    <div id="gateSummary" class="gate-summary">Chưa có thông tin lịch mở thi.</div>
+                  </div>
                 </div>
               </div>
 
-              <div class="result-layout">
-                <div class="result-card">
-                  <h4>Phân tích theo nhóm kiến thức</h4>
-                  <div id="adminGroupAnalysis" class="group-analysis-list"></div>
-                </div>
-                <div class="result-card">
-                  <h4>Phân tích câu hỏi</h4>
-                  <div class="muted small" style="margin-bottom:12px">Tự động tổng hợp số lượt chọn A/B/C/D và tỷ lệ đúng của từng câu hỏi từ dữ liệu bài làm đã lưu.</div>
-                  <div class="table-wrap" style="max-height:420px">
+              <div id="adminRosterSection" class="admin-tab-panel">
+                <div class="section-card" style="margin-top:0">
+                  <div class="panel-title-row">
+                  </div>
+
+                  <div class="result-layout" style="margin-top:12px">
+                    <div class="section-card" style="margin-top:0">
+                      <h4 style="margin:0 0 6px">Thêm thí sinh</h4>
+                      <div class="muted small">Chọn đơn vị, nhập tên cán bộ, chọn chức vụ rồi ấn Lưu.</div>
+                      <label for="adminRosterUnit">Đơn vị</label>
+                      <select id="adminRosterUnit"><option value="">-- Chọn đơn vị --</option></select>
+
+                      <label for="adminParticipantName">Tên cán bộ</label>
+                      <input id="adminParticipantName" type="text" placeholder="Nhập họ và tên cán bộ" />
+
+                      <label for="adminParticipantPosition">Chức vụ</label>
+                      <select id="adminParticipantPosition">
+                        <option>Cán bộ</option>
+                        <option>Phó Đội trưởng</option>
+                        <option>Đội trưởng</option>
+                      </select>
+
+                      <div class="action-row" style="margin-top:12px">
+                        <button id="btnAddParticipant" class="warning">Lưu</button>
+                      </div>
+                    </div>
+
+                    <div class="section-card" style="margin-top:0">
+                      <h4 style="margin:0 0 6px">Xóa thí sinh</h4>
+                      <div class="muted small">Chọn đơn vị, chọn cán bộ trong danh sách rồi ấn Xóa.</div>
+                      <label for="adminRemoveUnit">Đơn vị</label>
+                      <select id="adminRemoveUnit"><option value="">-- Chọn đơn vị --</option></select>
+
+                      <label for="adminParticipantList">Danh sách cán bộ</label>
+                      <select id="adminParticipantList" size="10"></select>
+
+                      <div class="action-row" style="margin-top:12px">
+                        <button id="btnDeleteParticipant" class="danger">Xóa</button>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div id="rosterSummary" class="status neutral" style="margin-top:12px">Chưa chọn đơn vị để quản lý danh sách thí sinh.</div>
+
+                  <div class="table-wrap" style="margin-top:12px;max-height:320px">
                     <table>
                       <thead>
                         <tr>
                           <th>STT</th>
-                          <th>Nhóm</th>
-                          <th>Nội dung câu hỏi</th>
-                          <th>A</th>
-                          <th>B</th>
-                          <th>C</th>
-                          <th>D</th>
-                          <th>Tỷ lệ đúng</th>
+                          <th>Đơn vị</th>
+                          <th>Họ và tên</th>
+                          <th>Chức vụ</th>
                         </tr>
                       </thead>
-                      <tbody id="questionAnalyticsBody"></tbody>
+                      <tbody id="adminRosterPreviewBody">
+                        <tr><td colspan="4" class="muted">Chưa có dữ liệu.</td></tr>
+                      </tbody>
                     </table>
                   </div>
                 </div>
               </div>
-            </div>
 
-            <div class="footer-note">
-              Gợi ý sử dụng: Admin lưu cấu hình trước kỳ thi, sau khi có kết quả có thể lọc theo đơn vị, in tổng hợp hoặc xuất Excel để lập báo cáo.
+              <div id="adminReportSection" class="admin-tab-panel">
+                <div class="section-card" style="margin-top:0">
+                  <div class="summary-grid">
+                    <div class="summary-box">
+                      <div class="label">Tổng số thí sinh</div>
+                      <div class="value" id="attendanceTotalRegistered">0</div>
+                    </div>
+                    <div class="summary-box">
+                      <div class="label">Đã tham gia thi</div>
+                      <div class="value" id="attendanceTotalPresent">0</div>
+                    </div>
+                    <div class="summary-box">
+                      <div class="label">Chưa tham gia</div>
+                      <div class="value" id="attendanceTotalAbsent">0</div>
+                    </div>
+                    <div class="summary-box">
+                      <div class="label">Tỷ lệ tham gia</div>
+                      <div class="value" id="attendanceRate">0%</div>
+                    </div>
+                  </div>
+
+                  <div id="attendanceExtraNote" class="status neutral">Báo cáo này dựa trên danh sách thí sinh do Admin nhập theo từng đơn vị.</div>
+
+                  <div class="summary-grid" style="margin-top:12px">
+                    <div class="summary-box">
+                      <div class="label">Xếp loại tổng: Yếu</div>
+                      <div class="value" id="attendanceGradeWeak">0</div>
+                    </div>
+                    <div class="summary-box">
+                      <div class="label">Xếp loại tổng: Trung bình</div>
+                      <div class="value" id="attendanceGradeAverage">0</div>
+                    </div>
+                    <div class="summary-box">
+                      <div class="label">Xếp loại tổng: Khá</div>
+                      <div class="value" id="attendanceGradeGood">0</div>
+                    </div>
+                    <div class="summary-box">
+                      <div class="label">Xếp loại tổng: Xuất sắc</div>
+                      <div class="value" id="attendanceGradeExcellent">0</div>
+                    </div>
+                  </div>
+
+                  <div class="result-layout">
+                    <div class="result-card">
+                      <h4>Tổng hợp theo đơn vị</h4>
+                      <div class="table-wrap" style="max-height:360px">
+                        <table>
+                          <thead>
+                            <tr>
+                              <th>STT</th>
+                              <th>Đơn vị</th>
+                              <th>Tổng danh sách</th>
+                              <th>Đã thi</th>
+                              <th>Chưa thi</th>
+                              <th>Yếu</th>
+                              <th>Trung bình</th>
+                              <th>Khá</th>
+                              <th>Xuất sắc</th>
+                              <th>Tỷ lệ tham gia</th>
+                            </tr>
+                          </thead>
+                          <tbody id="attendanceUnitBody"></tbody>
+                        </table>
+                      </div>
+                    </div>
+
+                    <div class="result-card">
+                      <h4>Danh sách thí sinh chưa dự thi</h4>
+                      <div class="table-wrap" style="max-height:360px">
+                        <table>
+                          <thead>
+                            <tr>
+                              <th>STT</th>
+                              <th>Đơn vị</th>
+                              <th>Họ và tên</th>
+                              <th>Chức vụ</th>
+                            </tr>
+                          </thead>
+                          <tbody id="attendanceAbsentBody"></tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="section-card">
+                  <h4 style="margin:0 0 6px">Danh sách điểm và bộ lọc</h4>
+                  <div class="muted small">Lọc theo họ tên, đơn vị, chức vụ, ngày thi, khoảng điểm và xếp loại.</div>
+                  <div class="filter-grid">
+                    <div>
+                      <label for="filterKeyword">Tìm họ tên / đơn vị</label>
+                      <input id="filterKeyword" type="text" placeholder="Nhập từ khóa..." />
+                    </div>
+                    <div>
+                      <label for="filterUnit">Đơn vị</label>
+                      <select id="filterUnit"><option value="">-- Tất cả đơn vị --</option></select>
+                    </div>
+                    <div>
+                      <label for="filterPosition">Chức vụ</label>
+                      <select id="filterPosition"><option value="">-- Tất cả chức vụ --</option></select>
+                    </div>
+                    <div>
+                      <label for="filterPassStatus">Xếp loại</label>
+                      <select id="filterPassStatus">
+                        <option value="">-- Tất cả --</option>
+                        <option value="Yếu">Yếu</option>
+                        <option value="Trung bình">Trung bình</option>
+                        <option value="Khá">Khá</option>
+                        <option value="Xuất sắc">Xuất sắc</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label for="filterDateFrom">Từ ngày</label>
+                      <input id="filterDateFrom" type="date" />
+                    </div>
+                    <div>
+                      <label for="filterDateTo">Đến ngày</label>
+                      <input id="filterDateTo" type="date" />
+                    </div>
+                    <div>
+                      <label for="filterMinScore">Điểm từ</label>
+                      <input id="filterMinScore" type="number" min="0" step="0.5" placeholder="Ví dụ 5" />
+                    </div>
+                    <div>
+                      <label for="filterMaxScore">Điểm đến</label>
+                      <input id="filterMaxScore" type="number" min="0" step="0.5" placeholder="Ví dụ 10" />
+                    </div>
+                  </div>
+                  <div class="action-row" style="margin-top:12px">
+                    <button id="btnClearFilters" class="secondary">Xóa lọc</button>
+                  </div>
+                </div>
+
+                <div class="summary-grid">
+                  <div class="summary-box">
+                    <div class="label">Tổng số bài thi</div>
+                    <div class="value" id="statTotal">0</div>
+                  </div>
+                  <div class="summary-box">
+                    <div class="label">Điểm trung bình</div>
+                    <div class="value" id="statAverage">0</div>
+                  </div>
+                  <div class="summary-box">
+                    <div class="label">Điểm cao nhất</div>
+                    <div class="value" id="statMax">0</div>
+                  </div>
+                  <div class="summary-box">
+                    <div class="label">Điểm thấp nhất</div>
+                    <div class="value" id="statMin">0</div>
+                  </div>
+                  <div class="summary-box">
+                    <div class="label">Tỷ lệ từ 5 điểm</div>
+                    <div class="value" id="statPassRate">0%</div>
+                  </div>
+                </div>
+
+                <div class="admin-panels">
+                  <div class="result-card">
+                    <div class="panel-title-row">
+                      <h4 style="margin:0">Danh sách kết quả</h4>
+                      <div class="muted small">Bảng dưới đây thay đổi theo bộ lọc đang áp dụng.</div>
+                    </div>
+                    <div class="table-wrap">
+                      <table>
+                        <thead>
+                          <tr>
+                            <th>#</th>
+                            <th>Thời gian nộp</th>
+                            <th>Họ và tên</th>
+                            <th>Chức vụ</th>
+                            <th>Đơn vị</th>
+                            <th>Điểm</th>
+                            <th>Số câu đúng</th>
+                            <th>Tỷ lệ</th>
+                            <th>Kết quả</th>
+                            <th>Thời gian làm bài</th>
+                          </tr>
+                        </thead>
+                        <tbody id="adminResultBody"></tbody>
+                      </table>
+                    </div>
+                  </div>
+
+                  <div class="result-layout">
+                    <div class="result-card">
+                      <h4>Phân tích theo nhóm kiến thức</h4>
+                      <div id="adminGroupAnalysis" class="group-analysis-list"></div>
+                    </div>
+                    <div class="result-card">
+                      <h4>Phân tích câu hỏi</h4>
+                      <div class="muted small" style="margin-bottom:12px">Tự động tổng hợp số lượt chọn A/B/C/D và tỷ lệ đúng của từng câu hỏi từ dữ liệu bài làm đã lưu.</div>
+                      <div class="table-wrap" style="max-height:420px">
+                        <table>
+                          <thead>
+                            <tr>
+                              <th>STT</th>
+                              <th>Nhóm</th>
+                              <th>Nội dung câu hỏi</th>
+                              <th>A</th>
+                              <th>B</th>
+                              <th>C</th>
+                              <th>D</th>
+                              <th>Tỷ lệ đúng</th>
+                            </tr>
+                          </thead>
+                          <tbody id="questionAnalyticsBody"></tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="footer-note">
+                  Gợi ý sử dụng: Admin lưu cấu hình trước kỳ thi, sau khi có kết quả có thể lọc theo đơn vị, in tổng hợp hoặc xuất Excel để lập báo cáo.
+                </div>
+              </div>
             </div>
           </div>
 
@@ -1080,6 +1316,7 @@
   </div>
 
   <div class="copyright">Design by Đội 2, Phòng PC07 Quảng Ninh</div>
+  <div id="toastContainer" class="toast-container" aria-live="polite" aria-atomic="true"></div>
 
 <script>
 (() => {
@@ -1096,9 +1333,10 @@
     totalQuestions: 20,
     timeMinutes: 15,
     passScore: 5,
-    fullscreenOnStart: true,
     groupDistribution: {}
   };
+
+  const DEFAULT_POSITION = "Cán bộ";
 
   const state = {
     allQuestions: [],
@@ -1119,12 +1357,53 @@
       start: "",
       end: "",
       updatedAt: "",
-      examSettings: { ...DEFAULT_SETTINGS }
+      examSettings: { ...DEFAULT_SETTINGS },
+      participantRegistry: {}
     },
     settings: { ...DEFAULT_SETTINGS }
   };
 
   const $ = (id) => document.getElementById(id);
+
+  function inferToastType(message) {
+    const text = String(message || '').toLowerCase();
+    if (!text) return 'info';
+    if (/(sai mật khẩu|không tải|không lưu|lỗi|thất bại|không thể|không tìm thấy)/.test(text)) return 'error';
+    if (/(vui lòng|hãy chọn|chưa có|chưa được|không còn|hết thời gian|chưa cấu hình|cục bộ|cảnh báo)/.test(text)) return 'warning';
+    if (/(đã |thành công|đồng bộ|cập nhật|thêm|xóa|khôi phục|nộp bài)/.test(text)) return 'success';
+    return 'info';
+  }
+
+  function showToast(message, type = 'info', title = '') {
+    const container = $('toastContainer');
+    if (!container) return;
+    const tone = ['success','warning','error','info'].includes(type) ? type : inferToastType(message);
+    const titleMap = { success: 'Thành công', warning: 'Lưu ý', error: 'Lỗi', info: 'Thông báo' };
+    const toast = document.createElement('div');
+    toast.className = 'toast ' + tone;
+    toast.innerHTML = `
+      <div class="toast-body">
+        <div class="toast-title"></div>
+        <div class="toast-message"></div>
+      </div>
+      <button type="button" class="toast-close" aria-label="Đóng thông báo">×</button>
+    `;
+    toast.querySelector('.toast-title').textContent = title || titleMap[tone] || 'Thông báo';
+    toast.querySelector('.toast-message').textContent = String(message || '');
+    const removeToast = () => {
+      if (!toast.isConnected || toast.classList.contains('removing')) return;
+      toast.classList.add('removing');
+      setTimeout(() => toast.remove(), 180);
+    };
+    toast.querySelector('.toast-close').addEventListener('click', removeToast);
+    container.appendChild(toast);
+    setTimeout(removeToast, 3400);
+  }
+
+  window.showToast = showToast;
+  window.alert = function(message) {
+    showToast(message, inferToastType(message));
+  };
   const loadStatus = $("loadStatus");
   const mainTitle = $("mainTitle");
   const mainSub = $("mainSub");
@@ -1149,7 +1428,7 @@
   }
 
   function syncLayoutMode(sectionId) {
-    const focusMode = sectionId === "examPanel" || sectionId === "resultPanel";
+    const focusMode = sectionId === "examPanel" || sectionId === "resultPanel" || sectionId === "adminPanel";
     document.body.classList.toggle("focus-mode", focusMode);
   }
 
@@ -1222,9 +1501,39 @@
       totalQuestions: Math.max(1, Math.round(normalizeNumber(src.totalQuestions, DEFAULT_SETTINGS.totalQuestions, 1))),
       timeMinutes: Math.max(1, Math.round(normalizeNumber(src.timeMinutes, DEFAULT_SETTINGS.timeMinutes, 1))),
       passScore: Number(normalizeNumber(src.passScore, DEFAULT_SETTINGS.passScore, 0).toFixed(1)),
-      fullscreenOnStart: src.fullscreenOnStart !== false,
       groupDistribution: src.groupDistribution && typeof src.groupDistribution === "object" ? { ...src.groupDistribution } : {}
     };
+  }
+
+  function normalizeParticipantRegistry(registry) {
+    const normalized = {};
+    let source = registry;
+    if (typeof source === "string") {
+      try {
+        source = JSON.parse(source);
+      } catch (err) {
+        source = {};
+      }
+    }
+    if (!source || typeof source !== "object") return normalized;
+    Object.entries(source).forEach(([unit, list]) => {
+      const unitName = String(unit || "").trim();
+      if (!unitName) return;
+      const rows = Array.isArray(list) ? list : [];
+      const dedup = new Map();
+      rows.forEach(item => {
+        const rawName = typeof item === "string" ? item : (item?.name || item?.fullName || "");
+        const name = String(rawName || "").trim().replace(/\s+/g, " ");
+        if (!name) return;
+        const position = String(typeof item === "string" ? "" : (item?.position || item?.title || "" )).trim() || DEFAULT_POSITION;
+        const key = name.toLocaleLowerCase("vi");
+        if (!dedup.has(key)) {
+          dedup.set(key, { name, position });
+        }
+      });
+      normalized[unitName] = Array.from(dedup.values()).sort((a, b) => a.name.localeCompare(b.name, "vi"));
+    });
+    return normalized;
   }
 
   function normalizeExamWindow(config) {
@@ -1233,7 +1542,8 @@
       start: "",
       end: "",
       updatedAt: "",
-      examSettings: { ...DEFAULT_SETTINGS }
+      examSettings: { ...DEFAULT_SETTINGS },
+      participantRegistry: {}
     };
     if (!config || typeof config !== "object") return fallback;
     return {
@@ -1241,8 +1551,418 @@
       start: config.start || "",
       end: config.end || "",
       updatedAt: config.updatedAt || "",
-      examSettings: normalizeExamSettings(config.examSettings || config.settings || config.examConfig)
+      examSettings: normalizeExamSettings(config.examSettings || config.settings || config.examConfig),
+      participantRegistry: normalizeParticipantRegistry(config.participantRegistry || config.candidateRegistry || config.rosterByUnit || {})
     };
+  }
+
+  function getUnitOptions() {
+    return [...$("unit").options].map(option => option.value).filter(Boolean);
+  }
+
+  function getParticipantListByUnit(unit) {
+    const registry = normalizeParticipantRegistry(state.examWindow.participantRegistry);
+    return unit ? (registry[unit] || []) : [];
+  }
+
+  function findParticipantByName(unit, fullName) {
+    const nameKey = String(fullName || "").trim().replace(/\s+/g, " ").toLocaleLowerCase("vi");
+    return getParticipantListByUnit(unit).find(item => item.name.toLocaleLowerCase("vi") === nameKey) || null;
+  }
+
+  function parseRosterEditorText(text) {
+    return String(text || "")
+      .split(/\r?\n/)
+      .map(line => line.trim())
+      .filter(Boolean)
+      .map(line => {
+        let name = line;
+        let position = DEFAULT_POSITION;
+        if (line.includes("|")) {
+          const parts = line.split("|");
+          name = parts[0].trim();
+          position = (parts.slice(1).join("|").trim() || DEFAULT_POSITION);
+        } else if (line.includes("\t")) {
+          const parts = line.split("\t");
+          name = parts[0].trim();
+          position = (parts.slice(1).join(" ").trim() || DEFAULT_POSITION);
+        }
+        return { name, position };
+      })
+      .filter(item => item.name);
+  }
+
+  function formatRosterEditorText(list) {
+    return (Array.isArray(list) ? list : []).map(item => {
+      const name = String(item?.name || "").trim();
+      const position = String(item?.position || "").trim();
+      if (!name) return "";
+      return position && position !== DEFAULT_POSITION ? name + " | " + position : name;
+    }).filter(Boolean).join("\n");
+  }
+
+  function populateAdminRosterUnits() {
+    const values = [...new Set([...getUnitOptions(), ...Object.keys(normalizeParticipantRegistry(state.examWindow.participantRegistry))])].sort((a, b) => a.localeCompare(b, "vi"));
+    ["adminRosterUnit", "adminRemoveUnit"].forEach(id => {
+      const select = $(id);
+      if (!select) return;
+      const current = select.value;
+      select.innerHTML = `<option value="">-- Chọn đơn vị --</option>` + values.map(v => `<option>${escapeHtml(v)}</option>`).join("");
+      if (values.includes(current)) {
+        select.value = current;
+      } else if (current && !values.includes(current)) {
+        select.value = "";
+      }
+    });
+  }
+
+  function renderAdminParticipantList() {
+    const registry = normalizeParticipantRegistry(state.examWindow.participantRegistry);
+    const unitForDelete = $("adminRemoveUnit")?.value?.trim() || "";
+    const fallbackUnit = $("adminRosterUnit")?.value?.trim() || "";
+    const previewUnit = unitForDelete || fallbackUnit;
+    const deleteList = $("adminParticipantList");
+    const previewBody = $("adminRosterPreviewBody");
+    const summary = $("rosterSummary");
+
+    if (deleteList) {
+      const list = unitForDelete ? (registry[unitForDelete] || []) : [];
+      if (list.length) {
+        deleteList.innerHTML = list.map((item, idx) => `<option value="${idx}">${escapeHtml(item.name)}${item.position ? ' • ' + escapeHtml(item.position) : ''}</option>`).join("");
+      } else {
+        deleteList.innerHTML = `<option value="">${unitForDelete ? 'Đơn vị này chưa có cán bộ trong danh sách' : 'Hãy chọn đơn vị để xem danh sách cán bộ'}</option>`;
+      }
+    }
+
+    if (previewBody) {
+      const previewList = previewUnit ? (registry[previewUnit] || []) : [];
+      if (!previewUnit) {
+        previewBody.innerHTML = `<tr><td colspan="4" class="muted">Chưa chọn đơn vị để xem danh sách.</td></tr>`;
+      } else if (!previewList.length) {
+        previewBody.innerHTML = `<tr><td colspan="4" class="muted">Đơn vị này chưa có thí sinh trong danh sách.</td></tr>`;
+      } else {
+        previewBody.innerHTML = previewList.map((item, idx) => `
+          <tr>
+            <td>${idx + 1}</td>
+            <td>${escapeHtml(previewUnit)}</td>
+            <td>${escapeHtml(item.name)}</td>
+            <td>${escapeHtml(item.position || DEFAULT_POSITION)}</td>
+          </tr>
+        `).join("");
+      }
+    }
+
+    if (summary) {
+      if (!previewUnit) {
+        summary.className = "status neutral";
+        summary.textContent = "Chưa chọn đơn vị để quản lý danh sách thí sinh.";
+      } else {
+        const count = (registry[previewUnit] || []).length;
+        summary.className = "status " + (count ? "success" : "warning");
+        summary.innerHTML = count
+          ? `Đơn vị <b>${escapeHtml(previewUnit)}</b> hiện có <b>${count}</b> thí sinh trong danh sách.`
+          : `Đơn vị <b>${escapeHtml(previewUnit)}</b> hiện chưa có thí sinh trong danh sách.`;
+      }
+    }
+  }
+
+  async function addParticipantForAdmin() {
+    const unit = $("adminRosterUnit")?.value?.trim() || "";
+    const name = $("adminParticipantName")?.value?.trim().replace(/\s+/g, " ") || "";
+    const position = $("adminParticipantPosition")?.value?.trim() || DEFAULT_POSITION;
+    if (!unit) {
+      alert("Vui lòng chọn đơn vị.");
+      return;
+    }
+    if (!name) {
+      alert("Vui lòng nhập tên cán bộ.");
+      $("adminParticipantName")?.focus();
+      return;
+    }
+
+    const registry = normalizeParticipantRegistry(state.examWindow.participantRegistry);
+    const list = Array.isArray(registry[unit]) ? [...registry[unit]] : [];
+    const key = name.toLocaleLowerCase("vi");
+    const existingIndex = list.findIndex(item => String(item.name || "").trim().toLocaleLowerCase("vi") === key);
+    let message = "Đã thêm cán bộ vào danh sách dự thi.";
+    if (existingIndex >= 0) {
+      list[existingIndex] = { name, position };
+      message = "Tên cán bộ đã tồn tại, hệ thống đã cập nhật lại chức vụ.";
+    } else {
+      list.push({ name, position });
+    }
+    registry[unit] = list;
+    state.examWindow.participantRegistry = normalizeParticipantRegistry(registry);
+    populateAdminRosterUnits();
+    $("adminRosterUnit").value = unit;
+    if ($("adminRemoveUnit")) $("adminRemoveUnit").value = unit;
+    $("adminParticipantName").value = "";
+    $("adminParticipantPosition").value = position || DEFAULT_POSITION;
+    renderAdminParticipantList();
+    renderCandidateNameOptions($("candidateUnitSelect")?.value || "");
+    renderAttendanceReport();
+
+    await saveExamWindowConfig({
+      ...state.examWindow,
+      updatedAt: new Date().toISOString(),
+      examSettings: readAdminSettingsForm(),
+      participantRegistry: normalizeParticipantRegistry(state.examWindow.participantRegistry)
+    });
+    alert(message);
+    $("adminParticipantName")?.focus();
+  }
+
+  async function deleteSelectedParticipantForAdmin() {
+    const unit = $("adminRemoveUnit")?.value?.trim() || "";
+    const selectedIndex = Number($("adminParticipantList")?.value);
+    if (!unit) {
+      alert("Vui lòng chọn đơn vị cần xóa cán bộ.");
+      return;
+    }
+    if (!Number.isInteger(selectedIndex) || selectedIndex < 0) {
+      alert("Vui lòng chọn cán bộ cần xóa.");
+      return;
+    }
+
+    const registry = normalizeParticipantRegistry(state.examWindow.participantRegistry);
+    const list = Array.isArray(registry[unit]) ? [...registry[unit]] : [];
+    const person = list[selectedIndex];
+    if (!person) {
+      alert("Không tìm thấy cán bộ cần xóa.");
+      return;
+    }
+    const ok = confirm(`Bạn chắc chắn muốn xóa ${person.name} khỏi danh sách đơn vị ${unit}?`);
+    if (!ok) return;
+
+    list.splice(selectedIndex, 1);
+    registry[unit] = list;
+    state.examWindow.participantRegistry = normalizeParticipantRegistry(registry);
+    populateAdminRosterUnits();
+    $("adminRemoveUnit").value = unit;
+    if ($("adminRosterUnit") && !$("adminRosterUnit").value) $("adminRosterUnit").value = unit;
+    renderAdminParticipantList();
+    renderCandidateNameOptions($("candidateUnitSelect")?.value || "");
+    renderAttendanceReport();
+
+    await saveExamWindowConfig({
+      ...state.examWindow,
+      updatedAt: new Date().toISOString(),
+      examSettings: readAdminSettingsForm(),
+      participantRegistry: normalizeParticipantRegistry(state.examWindow.participantRegistry)
+    });
+    alert("Đã xóa cán bộ khỏi danh sách dự thi.");
+  }
+
+  function renderRosterEditor() {
+    renderAdminParticipantList();
+  }
+
+  function saveCurrentRosterEditorToState(showNotice = true) {
+    return true;
+  }
+
+  function clearRosterForCurrentUnit() {
+    return;
+  }
+
+  function updateCandidateHiddenFields(unit, participant) {
+    $("fullName").value = participant?.name || "";
+    $("position").value = participant?.position || "";
+    if (participant && participant.name) {
+      $("candidateRosterStatus").className = "status success";
+      $("candidateRosterStatus").innerHTML = "Thí sinh đã chọn: <b>" + escapeHtml(participant.name) + "</b>" + (participant.position ? " • Chức vụ: <b>" + escapeHtml(participant.position) + "</b>" : "");
+    } else if (unit) {
+      const list = getParticipantListByUnit(unit);
+      if (list.length) {
+        $("candidateRosterStatus").className = "status info";
+        $("candidateRosterStatus").textContent = "Đơn vị này có " + list.length + " thí sinh trong danh sách. Hãy chọn tên để bắt đầu thi.";
+      } else {
+        $("candidateRosterStatus").className = "status warning";
+        $("candidateRosterStatus").textContent = "Đơn vị này chưa được Admin nhập danh sách thí sinh.";
+      }
+    } else {
+      $("candidateRosterStatus").className = "status neutral";
+      $("candidateRosterStatus").textContent = "Hãy chọn đơn vị trước, sau đó chọn tên thí sinh tương ứng.";
+    }
+  }
+
+  function renderCandidateNameOptions(selectedName = "") {
+    const unit = $("unit").value.trim();
+    const select = $("candidateNameSelect");
+    const roster = getParticipantListByUnit(unit);
+    if (!unit) {
+      select.innerHTML = '<option value="">-- Chọn đơn vị trước --</option>';
+      select.disabled = true;
+      updateCandidateHiddenFields("", null);
+      return;
+    }
+    if (!roster.length) {
+      select.innerHTML = '<option value="">-- Chưa có danh sách thí sinh --</option>';
+      select.disabled = true;
+      updateCandidateHiddenFields(unit, null);
+      return;
+    }
+    select.disabled = false;
+    select.innerHTML = '<option value="">-- Chọn thí sinh --</option>' + roster.map((item, idx) => `<option value="${idx}">${escapeHtml(item.name)}${item.position ? " • " + escapeHtml(item.position) : ""}</option>`).join("");
+    const normalizedSelected = String(selectedName || "").trim().replace(/\s+/g, " ").toLocaleLowerCase("vi");
+    if (normalizedSelected) {
+      const idx = roster.findIndex(item => item.name.toLocaleLowerCase("vi") === normalizedSelected);
+      if (idx >= 0) {
+        select.value = String(idx);
+        updateCandidateHiddenFields(unit, roster[idx]);
+        return;
+      }
+    }
+    updateCandidateHiddenFields(unit, null);
+  }
+
+  function handleCandidateNameChange() {
+    const unit = $("unit").value.trim();
+    const roster = getParticipantListByUnit(unit);
+    const idx = Number($("candidateNameSelect").value);
+    const participant = Number.isInteger(idx) && idx >= 0 ? roster[idx] : null;
+    updateCandidateHiddenFields(unit, participant || null);
+  }
+
+  function buildAttendanceReportData() {
+    const registry = normalizeParticipantRegistry(state.examWindow.participantRegistry);
+    const scopedUnit = $("filterUnit")?.value?.trim() || "";
+    const units = scopedUnit
+      ? [scopedUnit]
+      : [...new Set([...Object.keys(registry), ...state.adminRows.map(row => row.unit).filter(Boolean)])].sort((a, b) => a.localeCompare(b, "vi"));
+
+    const latestByCandidate = {};
+    state.adminRows.forEach(row => {
+      if (!row.unit || !row.fullName) return;
+      if (scopedUnit && row.unit !== scopedUnit) return;
+      const key = row.unit.toLocaleLowerCase("vi") + "||" + String(row.fullName).trim().replace(/\s+/g, " ").toLocaleLowerCase("vi");
+      const currentTime = new Date(row.submittedAt || 0).getTime();
+      const prevTime = latestByCandidate[key] ? new Date(latestByCandidate[key].submittedAt || 0).getTime() : -Infinity;
+      if (!latestByCandidate[key] || currentTime >= prevTime) {
+        latestByCandidate[key] = row;
+      }
+    });
+
+    const createGradeCounter = () => ({ "Yếu": 0, "Trung bình": 0, "Khá": 0, "Xuất sắc": 0 });
+    const overallGrades = createGradeCounter();
+    let totalRegistered = 0;
+    let totalPresent = 0;
+    const unitRows = [];
+    const absentRows = [];
+    const extraParticipants = [];
+
+    units.forEach(unit => {
+      const roster = registry[unit] || [];
+      const dedupRoster = normalizeParticipantRegistry({ [unit]: roster })[unit] || [];
+      const present = [];
+      const absent = [];
+      const unitLatestRows = Object.values(latestByCandidate).filter(row => row.unit === unit);
+      const unitGrades = createGradeCounter();
+
+      unitLatestRows.forEach(row => {
+        const label = ["Yếu", "Trung bình", "Khá", "Xuất sắc"].includes(row.passState)
+          ? row.passState
+          : getPassState(Number(row.score || 0));
+        unitGrades[label] = (unitGrades[label] || 0) + 1;
+        overallGrades[label] = (overallGrades[label] || 0) + 1;
+      });
+
+      dedupRoster.forEach(person => {
+        const key = unit.toLocaleLowerCase("vi") + "||" + person.name.toLocaleLowerCase("vi");
+        if (latestByCandidate[key]) present.push(person);
+        else absent.push(person);
+      });
+      totalRegistered += dedupRoster.length;
+      totalPresent += present.length;
+      unitRows.push({
+        unit,
+        total: dedupRoster.length,
+        present: present.length,
+        absent: absent.length,
+        grades: unitGrades,
+        tested: unitLatestRows.length,
+        rate: dedupRoster.length ? (present.length / dedupRoster.length) * 100 : 0
+      });
+      absent.forEach(person => absentRows.push({ unit, name: person.name, position: person.position || DEFAULT_POSITION }));
+    });
+
+    Object.values(latestByCandidate).forEach(row => {
+      const roster = registry[row.unit] || [];
+      const found = roster.some(person => person.name.toLocaleLowerCase("vi") === String(row.fullName || "").trim().replace(/\s+/g, " ").toLocaleLowerCase("vi"));
+      if (!found) {
+        extraParticipants.push({
+          unit: row.unit,
+          name: row.fullName,
+          position: row.position || "",
+          submittedAt: row.submittedAt
+        });
+      }
+    });
+
+    return {
+      totalRegistered,
+      totalPresent,
+      totalAbsent: Math.max(0, totalRegistered - totalPresent),
+      rate: totalRegistered ? (totalPresent / totalRegistered) * 100 : 0,
+      overallGrades,
+      unitRows,
+      absentRows,
+      extraParticipants
+    };
+  }
+
+  function renderAttendanceReport() {
+    const report = buildAttendanceReportData();
+    const unitBody = $("attendanceUnitBody");
+    const absentBody = $("attendanceAbsentBody");
+    $("attendanceTotalRegistered").textContent = String(report.totalRegistered);
+    $("attendanceTotalPresent").textContent = String(report.totalPresent);
+    $("attendanceTotalAbsent").textContent = String(report.totalAbsent);
+    $("attendanceRate").textContent = report.rate.toFixed(1) + "%";
+    $("attendanceGradeWeak").textContent = String(report.overallGrades["Yếu"] || 0);
+    $("attendanceGradeAverage").textContent = String(report.overallGrades["Trung bình"] || 0);
+    $("attendanceGradeGood").textContent = String(report.overallGrades["Khá"] || 0);
+    $("attendanceGradeExcellent").textContent = String(report.overallGrades["Xuất sắc"] || 0);
+
+    unitBody.innerHTML = report.unitRows.length
+      ? report.unitRows.map((item, idx) => `
+        <tr>
+          <td>${idx + 1}</td>
+          <td>${escapeHtml(item.unit)}</td>
+          <td>${item.total}</td>
+          <td>${item.present}</td>
+          <td>${item.absent}</td>
+          <td>${item.grades["Yếu"] || 0}</td>
+          <td>${item.grades["Trung bình"] || 0}</td>
+          <td>${item.grades["Khá"] || 0}</td>
+          <td>${item.grades["Xuất sắc"] || 0}</td>
+          <td>${item.rate.toFixed(1)}%</td>
+        </tr>
+      `).join("")
+      : '<tr><td colspan="10" class="muted">Chưa có dữ liệu danh sách thí sinh theo đơn vị.</td></tr>';
+
+    absentBody.innerHTML = report.absentRows.length
+      ? report.absentRows.map((item, idx) => `
+        <tr>
+          <td>${idx + 1}</td>
+          <td>${escapeHtml(item.unit)}</td>
+          <td>${escapeHtml(item.name)}</td>
+          <td>${escapeHtml(item.position || DEFAULT_POSITION)}</td>
+        </tr>
+      `).join("")
+      : '<tr><td colspan="4" class="muted">Không có thí sinh vắng thi trong phạm vi báo cáo hiện tại.</td></tr>';
+
+    const note = $("attendanceExtraNote");
+    if (!report.totalRegistered) {
+      note.className = "status warning";
+      note.textContent = "Admin chưa nhập danh sách thí sinh theo đơn vị nên chưa thể thống kê tỷ lệ tham gia thi.";
+    } else if (report.extraParticipants.length) {
+      note.className = "status info";
+      note.innerHTML = "Có <b>" + report.extraParticipants.length + "</b> bài thi của người chưa có trong danh sách đơn vị. Các trường hợp này không được tính vào mẫu số của báo cáo chuyên cần.";
+    } else {
+      note.className = "status success";
+      note.textContent = "Báo cáo chuyên cần đang được tính theo danh sách thí sinh Admin đã nhập.";
+    }
   }
 
   function saveLocalExamWindow(config) {
@@ -1263,11 +1983,31 @@
     }
   }
 
+  function showAdminSection(tabName = "structure") {
+    const safeTab = ["structure", "roster", "report"].includes(tabName) ? tabName : "structure";
+    document.querySelectorAll(".admin-tab-btn").forEach(btn => {
+      btn.classList.toggle("active", btn.dataset.adminTab === safeTab);
+    });
+    const map = {
+      structure: "adminStructureSection",
+      roster: "adminRosterSection",
+      report: "adminReportSection"
+    };
+    Object.entries(map).forEach(([key, id]) => {
+      const el = $(id);
+      if (el) el.classList.toggle("active", key === safeTab);
+    });
+  }
+
   function applySettingsFromConfig() {
     state.settings = normalizeExamSettings(state.examWindow.examSettings);
     renderWelcomePanel();
     fillAdminSettingsForm();
     renderDistributionEditor();
+    populateAdminRosterUnits();
+    renderRosterEditor();
+    renderCandidateNameOptions($("fullName")?.value || "");
+    renderAttendanceReport();
   }
 
   function getQuestionCount() {
@@ -1275,7 +2015,15 @@
   }
 
   function getPassState(score) {
-    return Number(score) >= Number(state.settings.passScore) ? "Đạt" : "Chưa đạt";
+    const value = Number(score || 0);
+    if (value < 5) return "Yếu";
+    if (value < 7) return "Trung bình";
+    if (value < 9) return "Khá";
+    return "Xuất sắc";
+  }
+
+  function getResultClass(label) {
+    return label === "Yếu" ? "result-fail" : "result-pass";
   }
 
   function getExamWindowStatus() {
@@ -1364,7 +2112,6 @@
     $("settingQuestionCount").value = state.settings.totalQuestions;
     $("settingTimeMinutes").value = state.settings.timeMinutes;
     $("settingPassScore").value = state.settings.passScore;
-    $("settingFullscreenOnStart").value = state.settings.fullscreenOnStart ? "yes" : "no";
     $("examOpenStart").value = state.examWindow.start ? toLocalDateTimeValue(state.examWindow.start) : "";
     $("examOpenEnd").value = state.examWindow.end ? toLocalDateTimeValue(state.examWindow.end) : "";
   }
@@ -1374,7 +2121,6 @@
       totalQuestions: $("settingQuestionCount").value,
       timeMinutes: $("settingTimeMinutes").value,
       passScore: $("settingPassScore").value,
-      fullscreenOnStart: $("settingFullscreenOnStart").value === "yes",
       groupDistribution: readDistributionInputs()
     });
   }
@@ -1432,6 +2178,7 @@
     if (!SCRIPT_URL || SCRIPT_URL.includes("PASTE_YOUR")) {
       statusBox.className = "status warning";
       statusBox.textContent = "Đã lưu cục bộ trên máy này. Muốn áp dụng cho mọi thí sinh, Apps Script cần hỗ trợ lưu/đọc action getConfig/saveConfig.";
+      showToast("Đã lưu cấu hình trên máy này, nhưng chưa đồng bộ lên hệ thống.", "warning");
       return { ok: false, localOnly: true };
     }
 
@@ -1445,81 +2192,29 @@
       if (data && data.ok) {
         statusBox.className = "status success";
         statusBox.textContent = "Đã lưu toàn bộ cấu hình kỳ thi thành công.";
+        showToast("Đã lưu toàn bộ cấu hình kỳ thi thành công.", "success");
       } else {
         statusBox.className = "status warning";
         statusBox.textContent = "Đã lưu cục bộ nhưng chưa lưu được lên hệ thống. Kiểm tra Apps Script action saveConfig/getConfig.";
+        showToast("Đã lưu cục bộ, nhưng chưa đồng bộ được lên hệ thống.", "warning");
       }
       return data;
     } catch (err) {
       statusBox.className = "status warning";
       statusBox.textContent = "Đã lưu cục bộ nhưng chưa lưu được lên hệ thống: " + (err.message || "Lỗi chưa xác định") + ".";
+      showToast("Không đồng bộ được cấu hình lên hệ thống: " + (err.message || "Lỗi chưa xác định"), "error");
       return { ok: false, message: err.message || "Không lưu được cấu hình" };
     }
   }
 
   function renderWelcomePanel() {
-    const status = getExamWindowStatus();
-    const totalQuestions = getQuestionCount();
-    const distribution = state.settings.groupDistribution || {};
-    const activeDist = Object.entries(distribution).filter(([, v]) => Number(v) > 0);
-    const distText = activeDist.length
-      ? activeDist.map(([name, count]) => escapeHtml(name) + ": " + Number(count)).join(" • ")
-      : "Ngẫu nhiên toàn bộ ngân hàng";
     $("welcomePanel").innerHTML = `
-      <div class="welcome-shell">
-        <div class="welcome-block">
-          <h3 class="welcome-title">Kỳ kiểm tra trực tuyến nghiệp vụ cán bộ kiểm tra PCCC</h3>
-          <div class="welcome-desc">
-            Hệ thống hỗ trợ mở thi theo thời gian, tự lưu bài làm, đánh dấu xem lại, điều hướng nhanh từng câu hỏi, in phiếu kết quả và phân tích chất lượng câu hỏi cho Admin.
-          </div>
-          <div class="info-cards">
-            <div class="info-card">
-              <div class="label">Số câu hiện hành</div>
-              <div class="value">${totalQuestions}</div>
-            </div>
-            <div class="info-card">
-              <div class="label">Thời lượng</div>
-              <div class="value">${state.settings.timeMinutes}</div>
-            </div>
-            <div class="info-card">
-              <div class="label">Điểm đạt</div>
-              <div class="value">${state.settings.passScore}</div>
-            </div>
-            <div class="info-card">
-              <div class="label">Ngân hàng câu hỏi</div>
-              <div class="value">${state.allQuestions.length || 0}</div>
-            </div>
-          </div>
-          <ul class="welcome-list">
-            <li>Nhấn <b>Thí sinh</b> để nhập thông tin và bắt đầu thi, hoặc <b>Admin</b> để cấu hình kỳ kiểm tra và xem kết quả.</li>
-            <li>Trong khi thi có thể dùng thanh điều hướng để chuyển nhanh giữa các câu, đánh dấu câu cần xem lại và bật toàn màn hình.</li>
-            <li>Sau khi nộp bài, hệ thống hiển thị chi tiết từng câu: đáp án đã chọn, đáp án đúng và căn cứ.</li>
-            <li>Admin có thể lọc theo họ tên, đơn vị, chức vụ, thời gian thi, khoảng điểm và xuất báo cáo Excel/CSV.</li>
-          </ul>
-        </div>
-        <div class="welcome-side">
-          <img src="ready-exam.png" alt="Sẵn sàng tổ chức thi" />
-          <div class="side-section">
-            <div style="font-size:20px;font-weight:700;color:#8f1414">Thông tin kỳ thi</div>
-            <div class="mini-badges">
-              <span class="mini-badge">Trạng thái: ${status.allowLogin ? "Đang mở thi" : "Chưa mở thi"}</span>
-              <span class="mini-badge">Toàn màn hình: ${state.settings.fullscreenOnStart ? "Đề nghị bật" : "Không bắt buộc"}</span>
-              <span class="mini-badge">Cơ cấu đề: ${distText}</span>
-            </div>
-          </div>
-          <div class="side-section">
-            <div style="font-size:18px;font-weight:700">Hướng dẫn nhanh</div>
-            <div class="muted small" style="margin-top:6px;line-height:1.6">
-              1) Nhập thông tin thí sinh.<br>
-              2) Bắt đầu thi và trả lời từng câu hỏi.<br>
-              3) Có thể đánh dấu xem lại và quay lại sau.<br>
-              4) Nộp bài để xem phiếu kết quả chi tiết.
-            </div>
-          </div>
-        </div>
+      <div class="welcome-illustration">
+        <img src="ready-exam.png" alt="Sẵn sàng tổ chức thi" />
       </div>
     `;
   }
+
 
   function normalizeQuestionRow(row, index) {
     const q = {
@@ -1723,24 +2418,9 @@
     return remaining;
   }
 
-  function updateFullscreenState() {
-    const active = Boolean(document.fullscreenElement);
-    $("fullscreenState").textContent = active ? "Toàn màn hình" : "Cửa sổ thường";
-    $("btnFullscreenToggle").textContent = active ? "Thoát toàn màn hình" : "Toàn màn hình";
-  }
+  function updateFullscreenState() {}
 
-  async function toggleFullscreen() {
-    try {
-      if (document.fullscreenElement) {
-        await document.exitFullscreen();
-      } else {
-        await document.documentElement.requestFullscreen();
-      }
-      updateFullscreenState();
-    } catch (err) {
-      updateFullscreenState();
-    }
-  }
+  async function toggleFullscreen() {}
 
   function renderProgress() {
     const answered = getAnsweredCount();
@@ -1891,7 +2571,6 @@
     state.currentIndex = 0;
     state.deadlineAt = null;
     state.submitted = false;
-    updateFullscreenState();
   }
 
   function startTimer() {
@@ -1907,20 +2586,7 @@
     }, 1000);
   }
 
-  async function requestFullscreenOnStart() {
-    if (!state.settings.fullscreenOnStart) {
-      updateFullscreenState();
-      return;
-    }
-    try {
-      if (!document.fullscreenElement) {
-        await document.documentElement.requestFullscreen();
-      }
-    } catch (err) {
-      console.warn("Không bật được toàn màn hình:", err);
-    }
-    updateFullscreenState();
-  }
+  async function requestFullscreenOnStart() {}
 
   function jumpToFirst(predicate) {
     const idx = state.examQuestions.findIndex(predicate);
@@ -1941,14 +2607,31 @@
       return;
     }
 
-    const fullName = $("fullName").value.trim();
-    const position = $("position").value.trim();
     const unit = $("unit").value.trim();
+    const participant = findParticipantByName(unit, $("fullName").value) || (() => {
+      const roster = getParticipantListByUnit(unit);
+      const idx = Number($("candidateNameSelect").value);
+      return Number.isInteger(idx) && idx >= 0 ? roster[idx] : null;
+    })();
 
-    if (!fullName || !unit || !position) {
-      alert("Vui lòng nhập đầy đủ Họ và tên, Chức vụ, Đơn vị.");
+    const fullName = participant?.name?.trim() || "";
+    const position = (participant?.position || DEFAULT_POSITION).trim();
+
+    if (!unit) {
+      alert("Vui lòng chọn đơn vị.");
       return;
     }
+    if (!getParticipantListByUnit(unit).length) {
+      alert("Đơn vị này chưa được Admin nhập danh sách thí sinh.");
+      return;
+    }
+    if (!fullName) {
+      alert("Vui lòng chọn tên thí sinh trong danh sách.");
+      return;
+    }
+    $("fullName").value = fullName;
+    $("position").value = position;
+
     if (!state.allQuestions.length) {
       alert("Gói câu hỏi chưa sẵn sàng.");
       return;
@@ -1968,13 +2651,12 @@
     $("candidateUnitView").textContent = unit;
     $("candidatePositionView").textContent = position;
 
-    updateMain("Đang làm bài thi", "Sử dụng thanh điều hướng, đánh dấu xem lại và toàn màn hình để làm bài thuận tiện hơn.");
+    updateMain("Đang làm bài thi", "Sử dụng thanh điều hướng và đánh dấu xem lại để làm bài thuận tiện hơn.");
     showOnly("examPanel");
     renderQuestion();
     renderTimer();
     saveActiveExam();
     startTimer();
-    requestFullscreenOnStart();
   }
 
   function restoreSavedExam() {
@@ -1993,9 +2675,11 @@
     state.deadlineAt = Number(saved.deadlineAt);
     state.settings = normalizeExamSettings(saved.settings || state.settings);
 
-    $("fullName").value = state.candidate.fullName || "";
     $("unit").value = state.candidate.unit || "";
-    $("position").value = state.candidate.position || "";
+    renderCandidateNameOptions(state.candidate.fullName || "");
+    $("fullName").value = state.candidate.fullName || "";
+    $("position").value = state.candidate.position || DEFAULT_POSITION;
+    handleCandidateNameChange();
     $("candidateNameView").textContent = state.candidate.fullName || "-";
     $("candidateUnitView").textContent = state.candidate.unit || "-";
     $("candidatePositionView").textContent = state.candidate.position || "-";
@@ -2005,7 +2689,6 @@
     renderQuestion();
     renderTimer();
     startTimer();
-    updateFullscreenState();
   }
 
   function buildResultPayload(correctCount, total, usedSeconds, detailRows) {
@@ -2061,7 +2744,7 @@
     $("metricFlaggedText").textContent = flagged + "/" + total;
     $("resultTimeAndRuleBox").innerHTML =
       "Thời gian đã dùng: <b>" + formatUsedSecondsText(usedSeconds) + "</b><br>" +
-      "Điểm đạt hiện hành: <b>" + state.settings.passScore + "</b> • Mỗi câu đúng: <b>" + POINTS_PER_CORRECT + " điểm</b>";
+      "Phân loại mặc định: <b>Dưới 5: Yếu</b> • <b>5 đến dưới 7: Trung bình</b> • <b>7 đến dưới 9: Khá</b> • <b>Từ 9 trở lên: Xuất sắc</b>";
   }
 
   function computeGroupSummaryFromDetails(detailRows) {
@@ -2147,7 +2830,7 @@
     $("resultScore").textContent = convertedScore.toFixed(1) + " điểm (" + correctCount + "/" + total + " câu đúng)";
     const passState = getPassState(convertedScore);
     $("resultStatusText").textContent = passState;
-    $("resultStatusText").className = "value " + (passState === "Đạt" ? "result-pass" : "result-fail");
+    $("resultStatusText").className = "value " + getResultClass(passState);
 
     renderResultMetrics(detailRows, usedSeconds);
     renderResultGroupAnalysis(detailRows);
@@ -2274,7 +2957,6 @@
     const settingsSnapshotValue = getFirstNonEmptyValue(row, ["settingsSnapshot", "settings", "examSettings"]);
     const settingsSnapshot = normalizeExamSettings(parseJSONMaybe(settingsSnapshotValue, {}));
 
-    const passScore = settingsSnapshot.passScore ?? state.settings.passScore;
     const submittedAt = getFirstNonEmptyValue(row, ["submittedAt", "timestamp", "time", "Thời gian nộp"]);
 
     return {
@@ -2290,7 +2972,7 @@
       usedTimeText: getFirstNonEmptyValue(row, ["usedTimeText", "durationText", "Thời gian làm bài"]),
       answerDetails: Array.isArray(answerDetails) ? answerDetails : [],
       settingsSnapshot,
-      passState: Number(convertedScore || 0) >= Number(passScore) ? "Đạt" : "Chưa đạt",
+      passState: getPassState(Number(convertedScore || 0)),
       raw: row
     };
   }
@@ -2342,8 +3024,7 @@
       if (keyword && !haystack.includes(keyword)) return false;
       if (unit && row.unit !== unit) return false;
       if (position && row.position !== position) return false;
-      if (passStatus === "pass" && row.passState !== "Đạt") return false;
-      if (passStatus === "fail" && row.passState !== "Chưa đạt") return false;
+      if (passStatus && row.passState !== passStatus) return false;
       if (minScore !== null && Number(row.score) < minScore) return false;
       if (maxScore !== null && Number(row.score) > maxScore) return false;
 
@@ -2371,6 +3052,7 @@
       $("statPassRate").textContent = "0%";
       renderAdminGroupAnalysis([]);
       renderQuestionAnalytics([]);
+      renderAttendanceReport();
       return;
     }
 
@@ -2384,7 +3066,7 @@
       totalScore += Number(row.score || 0);
       max = Math.max(max, Number(row.score || 0));
       min = Math.min(min, Number(row.score || 0));
-      if (row.passState === "Đạt") passCount++;
+      if (Number(row.score || 0) >= Number(state.settings.passScore || 5)) passCount++;
 
       const tr = document.createElement("tr");
       tr.innerHTML = `
@@ -2396,7 +3078,7 @@
         <td>${Number(row.score || 0).toFixed(1)}</td>
         <td>${Number(row.correctCount || 0)}/${Number(row.total || 0)}</td>
         <td>${Number(row.percent || 0).toFixed(2)}%</td>
-        <td class="${row.passState === "Đạt" ? "result-pass" : "result-fail"}">${row.passState}</td>
+        <td class="${getResultClass(row.passState)}">${row.passState}</td>
         <td>${escapeHtml(row.usedTimeText || formatUsedSecondsText(Number(row.usedSeconds || 0)))}</td>
       `;
       body.appendChild(tr);
@@ -2410,6 +3092,7 @@
 
     renderAdminGroupAnalysis(sorted);
     renderQuestionAnalytics(sorted);
+    renderAttendanceReport();
   }
 
   function renderAdminGroupAnalysis(rows) {
@@ -2719,7 +3402,8 @@
       fetchExamWindowConfig(true);
       $("roleList").classList.add("hidden");
       $("candidateForm").classList.remove("hidden");
-      updateMain("Thông tin thí sinh", "Nhập thông tin trước khi bắt đầu làm bài.");
+      updateMain("Thông tin thí sinh", "Chọn đơn vị và chọn tên trong danh sách để bắt đầu làm bài.");
+      renderCandidateNameOptions($("fullName").value);
       renderResumeBox();
       showOnly("welcomePanel");
       renderExamGateStatus();
@@ -2745,9 +3429,13 @@
     });
 
     $("btnStartExam").addEventListener("click", startExam);
-    $("fullName").addEventListener("keydown", handleCandidateStartByEnter);
-    $("position").addEventListener("keydown", handleCandidateStartByEnter);
+    $("unit").addEventListener("change", () => {
+      renderCandidateNameOptions("");
+      renderAttendanceReport();
+    });
     $("unit").addEventListener("keydown", handleCandidateStartByEnter);
+    $("candidateNameSelect").addEventListener("change", handleCandidateNameChange);
+    $("candidateNameSelect").addEventListener("keydown", handleCandidateStartByEnter);
 
     $("btnPrev").addEventListener("click", () => {
       if (state.currentIndex > 0) {
@@ -2780,14 +3468,15 @@
         alert("Không có câu nào đang được đánh dấu xem lại.");
       }
     });
-    $("btnFullscreenToggle").addEventListener("click", toggleFullscreen);
-    document.addEventListener("fullscreenchange", updateFullscreenState);
 
     $("btnSubmitExam").addEventListener("click", () => submitExam(false));
     $("btnBackHomeFromResult").addEventListener("click", () => {
       $("fullName").value = "";
       $("position").value = "";
       $("unit").value = "";
+      $("candidateNameSelect").innerHTML = '<option value="">-- Chọn đơn vị trước --</option>';
+      $("candidateNameSelect").disabled = true;
+      updateCandidateHiddenFields("", null);
       resetSidePanels();
       clearActiveExam();
       updateMain("Sẵn sàng tổ chức thi", "Hệ thống đang chờ lựa chọn chế độ làm việc.");
@@ -2802,8 +3491,12 @@
         alert("Sai mật khẩu admin.");
         return;
       }
-      updateMain("Bảng tổng hợp kết quả", "Đang tải cấu hình và kết quả bài thi...");
+      $("adminLogin").classList.add("hidden");
+      $("candidateForm").classList.add("hidden");
+      $("roleList").classList.remove("hidden");
+      updateMain("Admin", "");
       showOnly("adminPanel");
+      showAdminSection("structure");
       await fetchExamWindowConfig();
       await fetchAdminResults();
     }
@@ -2815,10 +3508,32 @@
       }
     });
 
-    $("btnRefreshResults").addEventListener("click", fetchAdminResults);
-    $("btnExportCsv").addEventListener("click", exportAdminCsv);
+    document.querySelectorAll(".admin-tab-btn").forEach(btn => {
+      btn.addEventListener("click", () => showAdminSection(btn.dataset.adminTab || "structure"));
+    });
+
+    if ($("btnRefreshResults")) $("btnRefreshResults").addEventListener("click", fetchAdminResults);
+    if ($("btnExportCsv")) $("btnExportCsv").addEventListener("click", exportAdminCsv);
     $("btnExportExcel").addEventListener("click", exportAdminExcel);
     $("btnPrintAdmin").addEventListener("click", printAdminSummary);
+
+    $("adminRosterUnit").addEventListener("change", () => {
+      if ($("adminRemoveUnit") && !$("adminRemoveUnit").value) {
+        $("adminRemoveUnit").value = $("adminRosterUnit").value;
+      }
+      renderAdminParticipantList();
+    });
+    $("adminRemoveUnit").addEventListener("change", () => {
+      renderAdminParticipantList();
+    });
+    $("btnAddParticipant").addEventListener("click", addParticipantForAdmin);
+    $("btnDeleteParticipant").addEventListener("click", deleteSelectedParticipantForAdmin);
+    $("adminParticipantName").addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        addParticipantForAdmin();
+      }
+    });
     $("btnLogoutAdmin").addEventListener("click", () => {
       $("adminPassword").value = "";
       resetSidePanels();
@@ -2879,12 +3594,14 @@
         startIso = start.toISOString();
         endIso = end.toISOString();
       }
+      saveCurrentRosterEditorToState(false);
       await saveExamWindowConfig({
         enabled,
         start: startIso,
         end: endIso,
         updatedAt: new Date().toISOString(),
-        examSettings: settings
+        examSettings: settings,
+        participantRegistry: normalizeParticipantRegistry(state.examWindow.participantRegistry)
       });
     });
 
@@ -2892,12 +3609,14 @@
       const settings = readAdminSettingsForm();
       const now = new Date();
       const end = new Date(now.getTime() + (settings.timeMinutes + 10) * 60 * 1000);
+      saveCurrentRosterEditorToState(false);
       await saveExamWindowConfig({
         enabled: true,
         start: now.toISOString(),
         end: end.toISOString(),
         updatedAt: now.toISOString(),
-        examSettings: settings
+        examSettings: settings,
+        participantRegistry: normalizeParticipantRegistry(state.examWindow.participantRegistry)
       });
     });
 
@@ -2905,22 +3624,26 @@
       const ok = confirm("Bạn chắc chắn muốn đóng thi ngay?");
       if (!ok) return;
       const settings = readAdminSettingsForm();
+      saveCurrentRosterEditorToState(false);
       await saveExamWindowConfig({
         enabled: false,
         start: "",
         end: "",
         updatedAt: new Date().toISOString(),
-        examSettings: settings
+        examSettings: settings,
+        participantRegistry: normalizeParticipantRegistry(state.examWindow.participantRegistry)
       });
     });
 
     ["filterKeyword","filterUnit","filterPosition","filterPassStatus","filterDateFrom","filterDateTo","filterMinScore","filterMaxScore"].forEach(id => {
-      $(id).addEventListener("change", applyAdminFilters);
-      $(id).addEventListener("keydown", (e) => {
+      const el = $(id);
+      el.addEventListener("change", applyAdminFilters);
+      el.addEventListener("input", applyAdminFilters);
+      el.addEventListener("keydown", (e) => {
         if (e.key === "Enter") applyAdminFilters();
       });
     });
-    $("btnApplyFilters").addEventListener("click", applyAdminFilters);
+    if ($("btnApplyFilters")) $("btnApplyFilters").addEventListener("click", applyAdminFilters);
     $("btnClearFilters").addEventListener("click", () => {
       ["filterKeyword","filterUnit","filterPosition","filterPassStatus","filterDateFrom","filterDateTo","filterMinScore","filterMaxScore"].forEach(id => {
         $(id).value = "";
@@ -2931,6 +3654,7 @@
 
   bindQuestionProtection();
   initEvents();
+  showAdminSection("structure");
   renderWelcomePanel();
   renderResumeBox();
   updateFullscreenState();
