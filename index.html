@@ -54,15 +54,15 @@
     }
     .top-unit{
       text-align:center;
-      color:var(--gold);
+      color:#ffffff;
       padding:18px 12px 4px;
       line-height:1.35;
       text-shadow:0 2px 6px rgba(0,0,0,.45);
       font-weight:700;
       text-transform:uppercase;
     }
-    .top-unit .line1{font-size:20px}
-    .top-unit .line2{font-size:19px}
+    .top-unit .line1{font-size:22px}
+    .top-unit .line2{font-size:22px}
     .topbar{
       width:calc(100vw - 32px);
       margin:26px 16px 0;
@@ -101,8 +101,9 @@
       display:grid;
       grid-template-columns:340px 1fr;
       gap:18px;
-      align-items:start;
+      align-items:stretch;
     }
+    .grid > .card{height:100%}
     body.focus-mode .grid{grid-template-columns:1fr}
     body.focus-mode #sidePanelCard{display:none}
 
@@ -116,6 +117,7 @@
     .card-header{padding:16px 20px;border-bottom:1px solid var(--border);background:#fff}
     .card-header h2,.card-header h3{margin:0 0 6px 0;font-size:22px}
     .card-body{padding:18px 20px 20px}
+    #sidePanelCard .card-body{display:flex;flex-direction:column;min-height:100%}
     .muted{color:var(--muted)}
     .small{font-size:14px}
     .tiny{font-size:13px}
@@ -664,6 +666,49 @@
     @keyframes toastIn{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
     @keyframes toastOut{from{opacity:1;transform:translateY(0)}to{opacity:0;transform:translateY(10px)}}
 
+
+    .center-alert-overlay{
+      position:fixed;
+      inset:0;
+      z-index:2200;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      padding:24px;
+      background:rgba(15,23,42,.58);
+      backdrop-filter:blur(4px);
+    }
+    .center-alert-box{
+      width:min(520px, calc(100vw - 32px));
+      background:#fff;
+      border:1px solid #dbe3ef;
+      border-radius:22px;
+      box-shadow:0 24px 70px rgba(15,23,42,.28);
+      padding:24px 24px 20px;
+      text-align:center;
+    }
+    .center-alert-title{
+      font-size:26px;
+      font-weight:700;
+      color:var(--primary-dark);
+      margin-bottom:12px;
+      line-height:1.25;
+    }
+    .center-alert-message{
+      font-size:18px;
+      line-height:1.65;
+      color:var(--text);
+      white-space:pre-line;
+    }
+    .center-alert-actions{
+      display:flex;
+      justify-content:center;
+      margin-top:20px;
+    }
+    .center-alert-actions button{
+      min-width:130px;
+    }
+
     @media (max-width:1200px){
       .info-cards{grid-template-columns:repeat(2,minmax(0,1fr))}
       .summary-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
@@ -690,8 +735,8 @@
       .summary-grid,.info-cards{grid-template-columns:1fr}
       .topbar{flex-direction:column;align-items:flex-start}
       .topbar h1{font-size:22px}
-      .top-unit .line1{font-size:17px}
-      .top-unit .line2{font-size:16px}
+      .top-unit .line1{font-size:18px}
+      .top-unit .line2{font-size:18px}
       .exam-status-topup{
         left:16px;right:16px;top:16px;min-width:0;max-width:none;
       }
@@ -736,7 +781,7 @@
           </div>
 
           <div id="candidateForm" class="hidden">
-            <div id="candidateGateStatus" class="status info">Đang kiểm tra trạng thái mở thi...</div>
+            <div id="candidateGateStatus" class="hidden"></div>
 
             <label for="unit">Đơn vị</label>
             <select id="unit">
@@ -767,10 +812,6 @@
               Admin cần nhập danh sách thí sinh theo đơn vị. Sau đó thí sinh chỉ cần chọn đơn vị và chọn tên để vào thi.
             </div>
 
-            <div class="note-box tiny">
-              Lưu ý: nhấn <b>Enter</b> để bắt đầu thi sau khi đã chọn đơn vị và tên. Trong quá trình làm bài có hỗ trợ tự lưu trạng thái và đánh dấu xem lại.
-            </div>
-
             <div id="resumeExamBox" class="resume-box hidden"></div>
 
             <div class="flex" style="margin-top:14px">
@@ -792,8 +833,8 @@
 
       <div class="card">
         <div class="card-header">
-          <h2 id="mainTitle">Sẵn sàng tổ chức thi</h2>
-          <div class="muted small" id="mainSub">Hệ thống đang chờ lựa chọn chế độ làm việc.</div>
+          <h2 id="mainTitle">KỲ THI TRỰC TUYẾN NGHIỆP VỤ CBKT</h2>
+          <div class="muted small" id="mainSub">THÁNG 3/2026</div>
         </div>
         <div class="card-body">
 
@@ -954,8 +995,6 @@
             <div class="panel-title-row">
               <div></div>
               <div class="action-row">
-                <button id="btnExportExcel" class="secondary">Xuất Excel</button>
-                <button id="btnPrintAdmin" class="secondary">In tổng hợp</button>
                 <button id="btnLogoutAdmin" class="secondary">Đăng xuất</button>
               </div>
             </div>
@@ -1012,6 +1051,12 @@
                       </div>
                     </div>
                     <div id="examPeriodSummary" class="status neutral" style="margin-top:12px">Chưa cấu hình tháng thi.</div>
+                  </div>
+
+                  <div class="section-card" style="margin-top:14px">
+                    <h4 style="margin:0 0 6px">Thông tin kỳ thi hiển thị trang đầu</h4>
+                    <label for="settingWelcomeContent">Nội dung kiểm tra</label>
+                    <textarea id="settingWelcomeContent" rows="6" placeholder="Mỗi dòng là một ý nội dung kiểm tra"></textarea>
                   </div>
 
                   <div class="section-card">
@@ -1182,6 +1227,7 @@
                       <div class="panel-title-row">
                         <h4 style="margin:0">Tổng hợp theo đơn vị</h4>
                         <div class="action-row">
+                          <button id="btnExportAttendanceUnitExcel" class="secondary">Xuất Excel theo đơn vị</button>
                           <button id="btnPrintAttendanceUnit" class="secondary">In tổng hợp theo đơn vị</button>
                         </div>
                       </div>
@@ -1210,6 +1256,7 @@
                       <div class="panel-title-row">
                         <h4 style="margin:0">Danh sách thí sinh chưa dự thi</h4>
                         <div class="action-row">
+                          <button id="btnExportAbsentListExcel" class="secondary">Xuất Excel chưa dự thi</button>
                           <button id="btnPrintAbsentList" class="secondary">In danh sách chưa dự thi</button>
                         </div>
                       </div>
@@ -1305,8 +1352,12 @@
                   <div class="result-card">
                     <div class="panel-title-row">
                       <h4 style="margin:0">Danh sách kết quả</h4>
-                      <div class="muted small">Bảng dưới đây thay đổi theo bộ lọc đang áp dụng.</div>
+                      <div class="action-row">
+                        <button id="btnPrintResultList" class="secondary">In danh sách</button>
+                        <button id="btnExportResultListExcel" class="secondary">Xuất Excel</button>
+                      </div>
                     </div>
+                    <div class="muted small" style="margin-bottom:10px">Bảng dưới đây thay đổi theo bộ lọc đang áp dụng.</div>
                     <div class="table-wrap">
                       <table>
                         <thead>
@@ -1331,7 +1382,7 @@
                 </div>
 
                 <div class="footer-note">
-                  Gợi ý sử dụng: Admin lưu cấu hình trước kỳ thi, sau khi có kết quả có thể lọc theo đơn vị, in tổng hợp hoặc xuất Excel để lập báo cáo.
+                  Gợi ý sử dụng: Admin lưu cấu hình trước kỳ thi, sau khi có kết quả có thể lọc theo đơn vị, in danh sách hoặc xuất Excel để lập báo cáo.
                 </div>
               </div>
             </div>
@@ -1344,6 +1395,15 @@
 
   <div class="copyright">Design by Đội 2, Phòng PC07 Quảng Ninh</div>
   <div id="toastContainer" class="toast-container" aria-live="polite" aria-atomic="true"></div>
+  <div id="centerAlertModal" class="center-alert-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="centerAlertTitle">
+    <div class="center-alert-box">
+      <div id="centerAlertTitle" class="center-alert-title">Thông báo</div>
+      <div id="centerAlertMessage" class="center-alert-message"></div>
+      <div class="center-alert-actions">
+        <button id="btnCenterAlertBack" type="button">Quay lại</button>
+      </div>
+    </div>
+  </div>
 
 <script>
 (() => {
@@ -1362,6 +1422,13 @@
     timeMinutes: 15,
     passScore: 5,
     groupDistribution: {}
+  };
+
+  const DEFAULT_EXAM_INFO = {
+    content: `- Các văn bản quy phạm pháp luật về PCCC và CNCH còn hiệu lực;
+- Quy định về xử phạt vi phạm hành chính trong lĩnh vực PCCC và CNCH;
+- Các tiêu chuẩn, quy chuẩn về PCCC và CNCH còn hiệu lực;
+- Các tình huống thực tế khi tổ chức kiểm tra về PCCC.`
   };
 
   const EXAM_ROUND_OPTIONS = ["Chính", "Bổ sung", "Bổ sung 2"];
@@ -1390,10 +1457,13 @@
       updatedAt: "",
       examSettings: { ...DEFAULT_SETTINGS },
       examPeriod: { month: "", round: "Chính" },
+      examInfo: { ...DEFAULT_EXAM_INFO },
       participantRegistry: {}
     },
     settings: { ...DEFAULT_SETTINGS },
-    candidatePool: { month: "", round: "", byUnit: {} }
+    candidatePool: { month: "", round: "", byUnit: {} },
+    candidateStatusCache: { month: "", byKey: {} },
+    candidatePoolPrefetchKey: ""
   };
 
   const $ = (id) => document.getElementById(id);
@@ -1433,11 +1503,29 @@
     setTimeout(removeToast, 3400);
   }
 
+  function showCenterAlert(message, title = "Thông báo") {
+    const overlay = $("centerAlertModal");
+    if (!overlay) return;
+    $("centerAlertTitle").textContent = title || "Thông báo";
+    $("centerAlertMessage").textContent = String(message || "");
+    overlay.classList.remove("hidden");
+    const backBtn = $("btnCenterAlertBack");
+    if (backBtn) setTimeout(() => backBtn.focus(), 0);
+  }
+
+  function hideCenterAlert() {
+    const overlay = $("centerAlertModal");
+    if (!overlay) return;
+    overlay.classList.add("hidden");
+  }
+
   window.showToast = showToast;
   window.alert = function(message) {
     showToast(message, inferToastType(message));
   };
   const loadStatus = $("loadStatus");
+  const centerAlertBackButton = $("btnCenterAlertBack");
+  if (centerAlertBackButton) centerAlertBackButton.addEventListener("click", hideCenterAlert);
   const mainTitle = $("mainTitle");
   const mainSub = $("mainSub");
 
@@ -1546,6 +1634,39 @@
     return "Tháng " + mon + "/" + year + " • Đợt " + round;
   }
 
+  function formatExamMonthTitle(monthValue) {
+    const month = normalizeMonthValue(monthValue, getCurrentMonthValue());
+    const [year, mon] = month.split("-");
+    return "THÁNG " + Number(mon) + "/" + year;
+  }
+
+  function normalizeExamInfo(info) {
+    const src = info && typeof info === "object" ? info : {};
+    const content = String(src.content || src.examContent || src.welcomeContent || DEFAULT_EXAM_INFO.content).trim();
+    return {
+      content: content || DEFAULT_EXAM_INFO.content
+    };
+  }
+
+  function getExamInfo() {
+    return normalizeExamInfo(state.examWindow?.examInfo || {});
+  }
+
+  function formatMultilineHtml(value) {
+    return escapeHtml(String(value || "")).replace(/\n/g, "<br>");
+  }
+
+  function setHomeHeader() {
+    updateMain("KỲ THI TRỰC TUYẾN NGHIỆP VỤ CBKT", formatExamMonthTitle(getConfiguredExamPeriod().month));
+  }
+
+  function syncHomeHeaderIfDefaultView() {
+    if (!$('welcomePanel') || $('welcomePanel').classList.contains('hidden')) return;
+    if (!$("candidateForm").classList.contains("hidden")) return;
+    if (!$("adminLogin").classList.contains("hidden")) return;
+    setHomeHeader();
+  }
+
   function getConfiguredExamPeriod() {
     return normalizeExamPeriod(state.examWindow?.examPeriod || {});
   }
@@ -1567,6 +1688,14 @@
     const period = getConfiguredExamPeriod();
     if (force || state.candidatePool.month !== period.month || state.candidatePool.round !== period.round) {
       state.candidatePool = { month: period.month, round: period.round, byUnit: {} };
+      state.candidatePoolPrefetchKey = "";
+    }
+  }
+
+  function resetCandidateStatusCache(force = false) {
+    const period = getConfiguredExamPeriod();
+    if (force || state.candidateStatusCache.month !== period.month) {
+      state.candidateStatusCache = { month: period.month, byKey: {} };
     }
   }
 
@@ -1653,6 +1782,7 @@
       updatedAt: "",
       examSettings: { ...DEFAULT_SETTINGS },
       examPeriod: normalizeExamPeriod({}),
+      examInfo: { ...DEFAULT_EXAM_INFO },
       participantRegistry: {}
     };
     if (!config || typeof config !== "object") return fallback;
@@ -1663,6 +1793,7 @@
       updatedAt: config.updatedAt || "",
       examSettings: normalizeExamSettings(config.examSettings || config.settings || config.examConfig),
       examPeriod: normalizeExamPeriod(config.examPeriod || config.period || config.examCycle || {}),
+      examInfo: normalizeExamInfo(config.examInfo || config.welcomeInfo || config.examNotice || {}),
       participantRegistry: normalizeParticipantRegistry(config.participantRegistry || config.candidateRegistry || config.rosterByUnit || {})
     };
   }
@@ -1682,10 +1813,46 @@
     return Array.isArray(cached) ? cached : getParticipantListByUnit(unit);
   }
 
+  async function prefetchEligibleRosterAll(force = false) {
+    resetCandidatePoolCache(force);
+    const period = getConfiguredExamPeriod();
+    const prefetchKey = period.month + "::" + period.round;
+    if (!force && state.candidatePoolPrefetchKey === prefetchKey) return;
+    state.candidatePoolPrefetchKey = prefetchKey;
+
+    const registry = normalizeParticipantRegistry(state.examWindow.participantRegistry);
+    Object.keys(registry).forEach(unit => {
+      if (!Array.isArray(state.candidatePool.byUnit[unit])) {
+        state.candidatePool.byUnit[unit] = registry[unit] || [];
+      }
+    });
+
+    if (!SCRIPT_URL || SCRIPT_URL.includes("PASTE_YOUR")) return;
+
+    try {
+      const url = new URL(SCRIPT_URL);
+      url.searchParams.set("action", "eligibleRosterAll");
+      url.searchParams.set("examMonth", period.month);
+      url.searchParams.set("examRound", period.round);
+      url.searchParams.set("_ts", String(Date.now()));
+      const resp = await fetch(url.toString());
+      const data = await resp.json();
+      if (data && data.ok && data.rowsByUnit && typeof data.rowsByUnit === "object") {
+        const normalized = normalizeParticipantRegistry(data.rowsByUnit);
+        state.candidatePool.byUnit = { ...state.candidatePool.byUnit, ...normalized };
+        if (!$("candidateForm").classList.contains("hidden")) {
+          handleCandidateNameChange();
+          renderResumeBox();
+        }
+      }
+    } catch (err) {
+      console.warn("Không tải được danh sách thí sinh hợp lệ toàn bộ:", err);
+    }
+  }
+
   async function ensureCandidatePoolForUnit(unit) {
     resetCandidatePoolCache();
     if (!unit) return [];
-    if (Array.isArray(state.candidatePool.byUnit[unit])) return state.candidatePool.byUnit[unit];
 
     const rawRoster = getParticipantListByUnit(unit);
     if (!rawRoster.length) {
@@ -1693,18 +1860,15 @@
       return [];
     }
 
-    if (!SCRIPT_URL || SCRIPT_URL.includes("PASTE_YOUR")) {
+    if (!Array.isArray(state.candidatePool.byUnit[unit])) {
       state.candidatePool.byUnit[unit] = rawRoster;
-      return rawRoster;
+    }
+
+    if (!SCRIPT_URL || SCRIPT_URL.includes("PASTE_YOUR")) {
+      return state.candidatePool.byUnit[unit];
     }
 
     const period = getConfiguredExamPeriod();
-    const statusBox = $("candidateRosterStatus");
-    if (statusBox) {
-      statusBox.className = "status info";
-      statusBox.textContent = "Đang tải danh sách thí sinh hợp lệ của đợt " + period.round + "...";
-    }
-
     try {
       const url = new URL(SCRIPT_URL);
       url.searchParams.set("action", "eligibleRoster");
@@ -1717,19 +1881,24 @@
       if (data && data.ok && Array.isArray(data.rows)) {
         const normalized = normalizeParticipantRegistry({ [unit]: data.rows })[unit] || [];
         state.candidatePool.byUnit[unit] = normalized;
+        if ($("unit").value.trim() === unit) {
+          const selectedName = $("fullName").value.trim();
+          renderCandidateNameOptions(selectedName);
+          handleCandidateNameChange();
+          renderResumeBox();
+        }
         return normalized;
       }
     } catch (err) {
       console.warn("Không lấy được danh sách thí sinh hợp lệ:", err);
     }
 
-    state.candidatePool.byUnit[unit] = rawRoster;
-    return rawRoster;
+    return state.candidatePool.byUnit[unit] || rawRoster;
   }
 
-  async function refreshCandidateNameOptions(selectedName = "") {
-    await ensureCandidatePoolForUnit($("unit").value.trim());
+  function refreshCandidateNameOptions(selectedName = "") {
     renderCandidateNameOptions(selectedName);
+    handleCandidateNameChange();
     renderResumeBox();
   }
 
@@ -1880,7 +2049,8 @@
       updatedAt: new Date().toISOString(),
       examSettings: readAdminSettingsForm(),
       participantRegistry: normalizeParticipantRegistry(state.examWindow.participantRegistry),
-      examPeriod: readAdminExamPeriodForm()
+      examPeriod: readAdminExamPeriodForm(),
+      examInfo: readAdminExamInfoForm()
     });
     alert(message);
     $("adminParticipantName")?.focus();
@@ -1923,7 +2093,8 @@
       updatedAt: new Date().toISOString(),
       examSettings: readAdminSettingsForm(),
       participantRegistry: normalizeParticipantRegistry(state.examWindow.participantRegistry),
-      examPeriod: readAdminExamPeriodForm()
+      examPeriod: readAdminExamPeriodForm(),
+      examInfo: readAdminExamInfoForm()
     });
     alert("Đã xóa cán bộ khỏi danh sách dự thi.");
   }
@@ -2021,9 +2192,12 @@
   function updateCandidateHiddenFields(unit, participant) {
     $("fullName").value = participant?.name || "";
     $("position").value = participant?.position || "";
+    const startBtn = $("btnStartExam");
+    const gateStatus = getExamWindowStatus();
     if (participant && participant.name) {
       $("candidateRosterStatus").className = "status success";
       $("candidateRosterStatus").innerHTML = "Thí sinh đã chọn: <b>" + escapeHtml(participant.name) + "</b>" + (participant.position ? " • Chức vụ: <b>" + escapeHtml(participant.position) + "</b>" : "");
+      if (startBtn) startBtn.disabled = !gateStatus.allowLogin;
     } else if (unit) {
       const list = getParticipantListByUnit(unit);
       if (list.length) {
@@ -2033,42 +2207,28 @@
         $("candidateRosterStatus").className = "status warning";
         $("candidateRosterStatus").textContent = "Đơn vị này chưa được Admin nhập danh sách thí sinh.";
       }
+      if (startBtn) startBtn.disabled = true;
     } else {
       $("candidateRosterStatus").className = "status neutral";
       $("candidateRosterStatus").textContent = "Hãy chọn đơn vị trước, sau đó chọn tên thí sinh tương ứng.";
+      if (startBtn) startBtn.disabled = !gateStatus.allowLogin;
     }
   }
 
   function renderCandidateNameOptions(selectedName = "") {
     const unit = $("unit").value.trim();
     const select = $("candidateNameSelect");
-    const roster = getCandidateExamListByUnit(unit);
-    const allRoster = getParticipantListByUnit(unit);
-    const period = getConfiguredExamPeriod();
+    const roster = getParticipantListByUnit(unit);
     if (!unit) {
       select.innerHTML = '<option value="">-- Chọn đơn vị trước --</option>';
       select.disabled = true;
       updateCandidateHiddenFields("", null);
       return;
     }
-    if (!allRoster.length) {
+    if (!roster.length) {
       select.innerHTML = '<option value="">-- Chưa có danh sách thí sinh --</option>';
       select.disabled = true;
       updateCandidateHiddenFields(unit, null);
-      return;
-    }
-    if (!roster.length) {
-      const emptyLabel = period.round === "Chính"
-        ? '-- Chưa có thí sinh hợp lệ --'
-        : '-- Không còn thí sinh cần thi bổ sung --';
-      select.innerHTML = `<option value="">${emptyLabel}</option>`;
-      select.disabled = true;
-      updateCandidateHiddenFields(unit, null);
-      const statusBox = $("candidateRosterStatus");
-      statusBox.className = period.round === "Chính" ? "status warning" : "status info";
-      statusBox.textContent = period.round === "Chính"
-        ? "Đơn vị này chưa có thí sinh hợp lệ để vào thi."
-        : "Đợt " + period.round + " chỉ hiển thị những thí sinh chưa hoàn thành bài thi trong tháng " + period.month + ". Hiện đơn vị này không còn thí sinh cần thi bổ sung.";
       return;
     }
     select.disabled = false;
@@ -2085,13 +2245,50 @@
     updateCandidateHiddenFields(unit, null);
   }
 
+  function applyCandidateEligibilityUi(result, unit, fullName, participant) {
+    const startBtn = $("btnStartExam");
+    const gateStatus = getExamWindowStatus();
+    if (!unit || !fullName || !participant) {
+      if (startBtn) startBtn.disabled = !gateStatus.allowLogin;
+      return;
+    }
+    if (startBtn) startBtn.disabled = !gateStatus.allowLogin;
+    $("candidateRosterStatus").className = "status success";
+    $("candidateRosterStatus").innerHTML = "Thí sinh đã chọn: <b>" + escapeHtml(fullName) + "</b>" + (participant.position ? " • Chức vụ: <b>" + escapeHtml(participant.position) + "</b>" : "");
+  }
+
+  async function refreshSelectedCandidateStatus() {
+    const unit = $("unit").value.trim();
+    const roster = getParticipantListByUnit(unit);
+    const idx = Number($("candidateNameSelect").value);
+    const participant = Number.isInteger(idx) && idx >= 0 ? roster[idx] : null;
+    const fullName = participant?.name?.trim() || $("fullName").value.trim();
+    if (!unit || !fullName || !participant) {
+      return;
+    }
+    const cacheKey = makeCandidateKey(unit, fullName) + "::" + getConfiguredExamPeriod().month;
+    if (state.candidateStatusCache.byKey[cacheKey]) {
+      applyCandidateEligibilityUi(state.candidateStatusCache.byKey[cacheKey], unit, fullName, participant);
+      return;
+    }
+    $("candidateRosterStatus").className = "status info";
+    $("candidateRosterStatus").textContent = "Đang kiểm tra trạng thái dự thi của thí sinh...";
+    const result = await checkCandidateMonthlyEligibility(unit, fullName, getConfiguredExamPeriod().month);
+    state.candidateStatusCache.byKey[cacheKey] = result;
+    const currentUnit = $("unit").value.trim();
+    const currentName = $("fullName").value.trim();
+    if (makeCandidateKey(currentUnit, currentName) !== makeCandidateKey(unit, fullName)) return;
+    applyCandidateEligibilityUi(result, unit, fullName, participant);
+  }
+
   function handleCandidateNameChange() {
     const unit = $("unit").value.trim();
-    const roster = getCandidateExamListByUnit(unit);
+    const roster = getParticipantListByUnit(unit);
     const idx = Number($("candidateNameSelect").value);
     const participant = Number.isInteger(idx) && idx >= 0 ? roster[idx] : null;
     updateCandidateHiddenFields(unit, participant || null);
     renderResumeBox();
+    refreshSelectedCandidateStatus();
   }
 
   function getRowsForReportScope() {
@@ -2328,7 +2525,9 @@
     populateAdminRosterUnits();
     renderRosterEditor();
     refreshCandidateNameOptions($("fullName")?.value || "");
+    prefetchEligibleRosterAll();
     renderAttendanceReport();
+    syncHomeHeaderIfDefaultView();
   }
 
   function getQuestionCount() {
@@ -2408,10 +2607,16 @@
     updateExamStatusTopup();
     const gateBox = $("candidateGateStatus");
     if (gateBox) {
-      gateBox.textContent = gateStatus.message;
-      gateBox.className = "status " + (gateStatus.allowLogin ? "success" : (gateStatus.phase === "pending" ? "info" : "warning"));
+      gateBox.textContent = "";
+      gateBox.className = "hidden";
     }
-    $("btnStartExam").disabled = !gateStatus.allowLogin;
+    if (!gateStatus.allowLogin) {
+      $("btnStartExam").disabled = true;
+    } else if ($("fullName").value.trim()) {
+      refreshSelectedCandidateStatus();
+    } else {
+      $("btnStartExam").disabled = false;
+    }
 
     const cfg = normalizeExamWindow(state.examWindow);
     const gateSummary = $("gateSummary");
@@ -2437,6 +2642,7 @@
     $("settingPassScore").value = state.settings.passScore;
     $("settingExamMonth").value = normalizeMonthValue(state.examWindow.examPeriod?.month || state.reportMonth || getCurrentMonthValue(), getCurrentMonthValue());
     $("settingExamRound").value = normalizeExamRound(state.examWindow.examPeriod?.round || EXAM_ROUND_OPTIONS[0]);
+    $("settingWelcomeContent").value = getExamInfo().content;
     $("reportMonth").value = normalizeMonthValue(state.reportMonth || state.examWindow.examPeriod?.month || getCurrentMonthValue(), getCurrentMonthValue());
     $("examOpenStart").value = state.examWindow.start ? toLocalDateTimeValue(state.examWindow.start) : "";
     $("examOpenEnd").value = state.examWindow.end ? toLocalDateTimeValue(state.examWindow.end) : "";
@@ -2445,6 +2651,12 @@
       periodBox.className = "status info";
       periodBox.textContent = "Kỳ thi hiện hành: " + buildExamCycleLabel($("settingExamMonth").value, $("settingExamRound").value) + ". Thí sinh đã có kết quả trong tháng này sẽ không được đăng nhập thi lại.";
     }
+  }
+
+  function readAdminExamInfoForm() {
+    return normalizeExamInfo({
+      content: $("settingWelcomeContent")?.value || ""
+    });
   }
 
   function readAdminSettingsForm() {
@@ -2547,9 +2759,23 @@
   }
 
   function renderWelcomePanel() {
+    const examPeriod = getConfiguredExamPeriod();
+    const examInfo = getExamInfo();
     $("welcomePanel").innerHTML = `
-      <div class="welcome-illustration">
-        <img src="ready-exam.png" alt="Sẵn sàng tổ chức thi" />
+      <div style="border:1px solid #e3e8f2;border-radius:18px;background:linear-gradient(180deg,#fff,#fff8f8);padding:26px 28px;box-shadow:0 12px 28px rgba(16,24,40,.06);height:100%;">
+        <div style="text-align:center;color:var(--primary-dark);font-weight:700;font-size:32px;line-height:1.35;text-transform:uppercase;">KỲ THI TRỰC TUYẾN NGHIỆP VỤ CBKT</div>
+        <div style="text-align:center;color:var(--primary);font-weight:700;font-size:26px;line-height:1.4;text-transform:uppercase;margin-top:6px;">${escapeHtml(formatExamMonthTitle(examPeriod.month))}</div>
+        <div style="margin-top:24px;border:1px solid #ead3d3;border-radius:16px;background:#fff;padding:18px 20px;">
+          <div style="font-size:22px;font-weight:700;color:var(--primary-dark);margin-bottom:10px;">1. Đối tượng</div>
+          <div style="font-size:19px;line-height:1.7;">
+            - Chỉ huy Đội 2; chỉ huy phụ trách công tác kiểm tra Đội 4, các Đội Chữa cháy và cứu nạn, cứu hộ khu vực;<br>
+            - Cán bộ, chiến sĩ đang trực tiếp, dự kiến phân công thực hiện nhiệm vụ kiểm tra về PCCC thuộc Phòng PC07.
+          </div>
+        </div>
+        <div style="margin-top:18px;border:1px solid #ead3d3;border-radius:16px;background:#fff;padding:18px 20px;">
+          <div style="font-size:22px;font-weight:700;color:var(--primary-dark);margin-bottom:10px;">2. Nội dung kiểm tra</div>
+          <div style="font-size:19px;line-height:1.7;">${formatMultilineHtml(examInfo.content)}</div>
+        </div>
       </div>
     `;
   }
@@ -3082,8 +3308,8 @@
     }
 
     const unit = $("unit").value.trim();
-    const participant = findEligibleParticipantByName(unit, $("fullName").value) || (() => {
-      const roster = getCandidateExamListByUnit(unit);
+    const participant = findParticipantByName(unit, $("fullName").value) || (() => {
+      const roster = getParticipantListByUnit(unit);
       const idx = Number($("candidateNameSelect").value);
       return Number.isInteger(idx) && idx >= 0 ? roster[idx] : null;
     })();
@@ -3097,11 +3323,6 @@
     }
     if (!getParticipantListByUnit(unit).length) {
       alert("Đơn vị này chưa được Admin nhập danh sách thí sinh.");
-      return;
-    }
-    if (!getCandidateExamListByUnit(unit).length) {
-      const period = getConfiguredExamPeriod();
-      alert(period.round === "Chính" ? "Hiện chưa có thí sinh hợp lệ để vào thi." : "Đợt " + period.round + " chỉ dành cho những người chưa hoàn thành bài thi trong tháng này.");
       return;
     }
     if (!fullName) {
@@ -3119,7 +3340,7 @@
     }
     if (eligibility.alreadySubmitted) {
       clearActiveExam(unit, fullName);
-      alert("Thí sinh này đã hoàn thành bài thi trong tháng " + examPeriod.month + " nên không thể đăng nhập thi lại.");
+      showCenterAlert("Thí sinh này đã tham gia kỳ thi tháng " + examPeriod.month + " nên không thể đăng nhập thi lại.");
       return;
     }
 
@@ -3982,6 +4203,68 @@
     `);
   }
 
+  function exportAttendanceUnitExcel() {
+    const report = buildAttendanceReportData();
+    if (!report.unitRows.length) {
+      alert("Chưa có dữ liệu tổng hợp theo đơn vị để xuất.");
+      return;
+    }
+    const sheetRows = report.unitRows.map((item, idx) => ({
+      STT: idx + 1,
+      "Đơn vị": item.unit,
+      "Tổng danh sách": item.total,
+      "Đã thi": item.present,
+      "Chưa thi": item.absent,
+      "Yếu": item.grades["Yếu"] || 0,
+      "Trung bình": item.grades["Trung bình"] || 0,
+      "Khá": item.grades["Khá"] || 0,
+      "Xuất sắc": item.grades["Xuất sắc"] || 0,
+      "Tỷ lệ tham gia": item.rate.toFixed(1) + "%"
+    }));
+    sheetRows.push({
+      STT: "",
+      "Đơn vị": "Tổng",
+      "Tổng danh sách": report.totalRegistered,
+      "Đã thi": report.totalPresent,
+      "Chưa thi": report.totalAbsent,
+      "Yếu": report.overallGrades["Yếu"] || 0,
+      "Trung bình": report.overallGrades["Trung bình"] || 0,
+      "Khá": report.overallGrades["Khá"] || 0,
+      "Xuất sắc": report.overallGrades["Xuất sắc"] || 0,
+      "Tỷ lệ tham gia": report.rate.toFixed(1) + "%"
+    });
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.json_to_sheet(sheetRows);
+    XLSX.utils.book_append_sheet(wb, ws, "Tong hop theo don vi");
+    XLSX.writeFile(wb, "tong_hop_theo_don_vi_" + getSelectedReportMonth() + ".xlsx");
+  }
+
+  function exportAbsentListExcel() {
+    const report = buildAttendanceReportData();
+    if (!report.absentRows.length) {
+      alert("Không có danh sách thí sinh chưa dự thi để xuất.");
+      return;
+    }
+    const sheetRows = report.absentRows.map((item, idx) => ({
+      STT: idx + 1,
+      "Đơn vị": item.unit,
+      "Họ và tên": item.name,
+      "Chức vụ": item.position || DEFAULT_POSITION
+    }));
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.json_to_sheet(sheetRows);
+    XLSX.utils.book_append_sheet(wb, ws, "Chua du thi");
+    XLSX.writeFile(wb, "danh_sach_chua_du_thi_" + getSelectedReportMonth() + ".xlsx");
+  }
+
+  function exportResultListExcel() {
+    exportAdminExcel();
+  }
+
+  function printResultList() {
+    printAdminSummary();
+  }
+
   function csvSafe(value) {
     const v = String(value ?? "").replaceAll('"', '""');
     return '"' + v + '"';
@@ -4024,6 +4307,7 @@
       $("candidateForm").classList.remove("hidden");
       updateMain("Thông tin thí sinh", "Chọn đơn vị và chọn tên trong danh sách để bắt đầu làm bài.");
       refreshCandidateNameOptions($("fullName").value);
+      prefetchEligibleRosterAll();
       showOnly("welcomePanel");
       renderExamGateStatus();
     });
@@ -4037,20 +4321,19 @@
 
     $("btnBackFromCandidate").addEventListener("click", () => {
       resetSidePanels();
-      updateMain("Sẵn sàng tổ chức thi", "Hệ thống đang chờ lựa chọn chế độ làm việc.");
+      setHomeHeader();
       showOnly("welcomePanel");
     });
 
     $("btnBackFromAdmin").addEventListener("click", () => {
       resetSidePanels();
-      updateMain("Sẵn sàng tổ chức thi", "Hệ thống đang chờ lựa chọn chế độ làm việc.");
+      setHomeHeader();
       showOnly("welcomePanel");
     });
 
     $("btnStartExam").addEventListener("click", startExam);
     $("unit").addEventListener("change", () => {
       refreshCandidateNameOptions("");
-      renderAttendanceReport();
     });
     $("unit").addEventListener("keydown", handleCandidateStartByEnter);
     $("candidateNameSelect").addEventListener("change", handleCandidateNameChange);
@@ -4098,13 +4381,15 @@
       updateCandidateHiddenFields("", null);
       resetSidePanels();
       clearActiveExam();
-      updateMain("Sẵn sàng tổ chức thi", "Hệ thống đang chờ lựa chọn chế độ làm việc.");
+      setHomeHeader();
       renderWelcomePanel();
       showOnly("welcomePanel");
     });
     $("btnPrintResult").addEventListener("click", printResult);
     $("btnPrintAttendanceUnit")?.addEventListener("click", printAttendanceUnitSummary);
+    $("btnExportAttendanceUnitExcel")?.addEventListener("click", exportAttendanceUnitExcel);
     $("btnPrintAbsentList")?.addEventListener("click", printAbsentList);
+    $("btnExportAbsentListExcel")?.addEventListener("click", exportAbsentListExcel);
     $("btnExportResultExcel").addEventListener("click", exportResultExcel);
 
     async function handleAdminLogin() {
@@ -4135,8 +4420,8 @@
 
     if ($("btnRefreshResults")) $("btnRefreshResults").addEventListener("click", fetchAdminResults);
     if ($("btnExportCsv")) $("btnExportCsv").addEventListener("click", exportAdminCsv);
-    $("btnExportExcel").addEventListener("click", exportAdminExcel);
-    $("btnPrintAdmin").addEventListener("click", printAdminSummary);
+    $("btnExportResultListExcel")?.addEventListener("click", exportResultListExcel);
+    $("btnPrintResultList")?.addEventListener("click", printResultList);
 
     $("adminRosterUnit").addEventListener("change", () => {
       if ($("adminRemoveUnit") && !$("adminRemoveUnit").value) {
@@ -4160,7 +4445,7 @@
     $("btnLogoutAdmin").addEventListener("click", () => {
       $("adminPassword").value = "";
       resetSidePanels();
-      updateMain("Sẵn sàng tổ chức thi", "Hệ thống đang chờ lựa chọn chế độ làm việc.");
+      setHomeHeader();
       renderWelcomePanel();
       showOnly("welcomePanel");
     });
@@ -4175,6 +4460,12 @@
           periodBox.className = "status info";
           periodBox.textContent = "Kỳ thi hiện hành: " + buildExamCycleLabel($("settingExamMonth").value, $("settingExamRound").value) + ". Thí sinh đã có kết quả trong tháng này sẽ không được đăng nhập thi lại.";
         }
+        if (!$("adminPanel").classList.contains("hidden")) {
+          renderWelcomePanel();
+        }
+      }
+      if (e.target && e.target.id === "settingWelcomeContent") {
+        renderWelcomePanel();
       }
     });
 
@@ -4236,7 +4527,8 @@
         updatedAt: new Date().toISOString(),
         examSettings: settings,
         participantRegistry: normalizeParticipantRegistry(state.examWindow.participantRegistry),
-        examPeriod: readAdminExamPeriodForm()
+        examPeriod: readAdminExamPeriodForm(),
+        examInfo: readAdminExamInfoForm()
       });
     });
 
@@ -4252,7 +4544,8 @@
         updatedAt: now.toISOString(),
         examSettings: settings,
         participantRegistry: normalizeParticipantRegistry(state.examWindow.participantRegistry),
-        examPeriod: readAdminExamPeriodForm()
+        examPeriod: readAdminExamPeriodForm(),
+        examInfo: readAdminExamInfoForm()
       });
     });
 
@@ -4268,7 +4561,8 @@
         updatedAt: new Date().toISOString(),
         examSettings: settings,
         participantRegistry: normalizeParticipantRegistry(state.examWindow.participantRegistry),
-        examPeriod: readAdminExamPeriodForm()
+        examPeriod: readAdminExamPeriodForm(),
+        examInfo: readAdminExamInfoForm()
       });
     });
 
