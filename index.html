@@ -1054,9 +1054,15 @@
                   </div>
 
                   <div class="section-card" style="margin-top:14px">
-                    <h4 style="margin:0 0 6px">Thông tin kỳ thi hiển thị trang đầu</h4>
+                    <div class="panel-title-row">
+                      <h4 style="margin:0">Thông tin kỳ thi hiển thị trang đầu</h4>
+                      <div class="action-row">
+                        <button id="btnSaveExamInfo" class="warning">Lưu nội dung kiểm tra</button>
+                      </div>
+                    </div>
                     <label for="settingWelcomeContent">Nội dung kiểm tra</label>
                     <textarea id="settingWelcomeContent" rows="6" placeholder="Mỗi dòng là một ý nội dung kiểm tra"></textarea>
+                    <div id="examInfoSaveHint" class="muted small" style="margin-top:10px">Sau khi chỉnh sửa nội dung kiểm tra, bấm <b>Lưu nội dung kiểm tra</b> để cập nhật lên hệ thống.</div>
                   </div>
 
                   <div class="section-card">
@@ -4482,6 +4488,16 @@
     $("btnClearDistribution").addEventListener("click", () => {
       document.querySelectorAll(".distribution-input").forEach(input => { input.value = 0; });
       updateDistributionSummary();
+    });
+
+    $("btnSaveExamInfo").addEventListener("click", async () => {
+      const currentConfig = normalizeExamWindow(state.examWindow);
+      await saveExamWindowConfig({
+        ...currentConfig,
+        updatedAt: new Date().toISOString(),
+        examPeriod: readAdminExamPeriodForm(),
+        examInfo: readAdminExamInfoForm()
+      });
     });
 
     $("btnSaveAllSettings").addEventListener("click", async () => {
