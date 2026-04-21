@@ -116,7 +116,11 @@
     }
     .card-header{padding:16px 20px;border-bottom:1px solid var(--border);background:#fff}
     .card-header h2,.card-header h3{margin:0 0 6px 0;font-size:22px}
+    #mainHeader{text-align:center;padding:28px 24px 16px}
+    #mainTitle{margin:0;font-size:clamp(30px,3.8vw,46px);font-weight:900;letter-spacing:.6px;line-height:1.18;color:var(--primary-dark);text-transform:uppercase;text-shadow:0 2px 6px rgba(0,0,0,.22), 0 0 12px rgba(125,16,16,.18)}
+    #mainSub{margin-top:10px;font-size:clamp(24px,2.6vw,32px);font-weight:800;letter-spacing:.4px;color:var(--primary-dark);text-shadow:0 2px 6px rgba(0,0,0,.22), 0 0 10px rgba(125,16,16,.16)}
     .card-body{padding:18px 20px 20px}
+    #mainHeader + .card-body{padding-top:10px}
     #sidePanelCard .card-body{display:flex;flex-direction:column;min-height:100%}
     .muted{color:var(--muted)}
     .small{font-size:14px}
@@ -768,7 +772,7 @@
     <div class="grid">
       <div class="card" id="sidePanelCard">
         <div class="card-body">
-          <div id="loadStatus" class="status info">Đang tải ngân hàng câu hỏi từ <b>questions.xlsx</b>...</div>
+          <div id="loadStatus" class="hidden"></div>
 
           <div class="role-list" id="roleList">
             <button class="role-btn" id="btnCandidateMode">
@@ -808,9 +812,7 @@
             <input id="fullName" type="hidden" />
             <input id="position" type="hidden" />
 
-            <div id="candidateRosterStatus" class="status neutral">
-              Admin cần nhập danh sách thí sinh theo đơn vị. Sau đó thí sinh chỉ cần chọn đơn vị và chọn tên để vào thi.
-            </div>
+            <div id="candidateRosterStatus" class="status neutral" style="display:none"></div>
 
             <div id="resumeExamBox" class="resume-box hidden"></div>
 
@@ -832,9 +834,9 @@
       </div>
 
       <div class="card">
-        <div class="card-header">
-          <h2 id="mainTitle">KỲ THI TRỰC TUYẾN NGHIỆP VỤ CBKT</h2>
-          <div class="muted small" id="mainSub">THÁNG 3/2026</div>
+        <div class="card-header" id="mainHeader">
+          <h2 id="mainTitle">KỲ THI TRỰC TUYẾN NGHIỆP VỤ KIỂM TRA VỀ PCCC</h2>
+          <div class="muted small" id="mainSub">THÁNG 4/2026</div>
         </div>
         <div class="card-body">
 
@@ -1469,7 +1471,8 @@
     settings: { ...DEFAULT_SETTINGS },
     candidatePool: { month: "", round: "", byUnit: {} },
     candidateStatusCache: { month: "", byKey: {} },
-    candidatePoolPrefetchKey: ""
+    candidatePoolPrefetchKey: "",
+    candidatePoolReady: false
   };
 
   const $ = (id) => document.getElementById(id);
@@ -1532,12 +1535,14 @@
   const loadStatus = $("loadStatus");
   const centerAlertBackButton = $("btnCenterAlertBack");
   if (centerAlertBackButton) centerAlertBackButton.addEventListener("click", hideCenterAlert);
+  const mainHeader = $("mainHeader");
   const mainTitle = $("mainTitle");
   const mainSub = $("mainSub");
 
   function setStatus(type, html) {
-    loadStatus.className = "status " + type;
-    loadStatus.innerHTML = html;
+    const hasContent = String(html || "").trim();
+    loadStatus.className = hasContent ? ("status " + type) : "hidden";
+    loadStatus.innerHTML = hasContent || "";
   }
 
   function escapeHtml(value) {
@@ -1562,6 +1567,9 @@
   function showOnly(sectionId) {
     ["welcomePanel","examPanel","resultPanel","adminPanel"].forEach(id => $(id).classList.add("hidden"));
     $(sectionId).classList.remove("hidden");
+    if (mainHeader) {
+      mainHeader.style.display = sectionId === "welcomePanel" ? "block" : "none";
+    }
     syncLayoutMode(sectionId);
     syncExamTopupVisibility(sectionId);
   }
@@ -1663,7 +1671,7 @@
   }
 
   function setHomeHeader() {
-    updateMain("KỲ THI TRỰC TUYẾN NGHIỆP VỤ CBKT", formatExamMonthTitle(getConfiguredExamPeriod().month));
+    updateMain("KỲ THI TRỰC TUYẾN NGHIỆP VỤ KIỂM TRA VỀ PCCC", formatExamMonthTitle(getConfiguredExamPeriod().month));
   }
 
   function syncHomeHeaderIfDefaultView() {
@@ -1695,6 +1703,7 @@
     if (force || state.candidatePool.month !== period.month || state.candidatePool.round !== period.round) {
       state.candidatePool = { month: period.month, round: period.round, byUnit: {} };
       state.candidatePoolPrefetchKey = "";
+      state.candidatePoolReady = false;
     }
   }
 
@@ -1823,7 +1832,7 @@
     resetCandidatePoolCache(force);
     const period = getConfiguredExamPeriod();
     const prefetchKey = period.month + "::" + period.round;
-    if (!force && state.candidatePoolPrefetchKey === prefetchKey) return;
+    if (!force && state.candidatePoolPrefetchKey === prefetchKey && state.candidatePoolReady) return;
     state.candidatePoolPrefetchKey = prefetchKey;
 
     const registry = normalizeParticipantRegistry(state.examWindow.participantRegistry);
@@ -1845,9 +1854,11 @@
       const data = await resp.json();
       if (data && data.ok && data.rowsByUnit && typeof data.rowsByUnit === "object") {
         const normalized = normalizeParticipantRegistry(data.rowsByUnit);
-        state.candidatePool.byUnit = { ...state.candidatePool.byUnit, ...normalized };
+        state.candidatePool = { month: period.month, round: period.round, byUnit: { ...registry, ...normalized } };
+        state.candidatePoolReady = true;
         if (!$("candidateForm").classList.contains("hidden")) {
-          handleCandidateNameChange();
+          const selectedName = $("candidateNameSelect")?.value ? ($("fullName")?.value || "") : "";
+          refreshCandidateNameOptions(selectedName);
           renderResumeBox();
         }
       }
@@ -1887,11 +1898,16 @@
       if (data && data.ok && Array.isArray(data.rows)) {
         const normalized = normalizeParticipantRegistry({ [unit]: data.rows })[unit] || [];
         state.candidatePool.byUnit[unit] = normalized;
+        state.candidatePoolReady = true;
         if ($("unit").value.trim() === unit) {
-          const selectedName = $("fullName").value.trim();
+          const selectedName = $("candidateNameSelect")?.value ? $("fullName").value.trim() : "";
           renderCandidateNameOptions(selectedName);
-          handleCandidateNameChange();
-          renderResumeBox();
+          if (selectedName) {
+            handleCandidateNameChange();
+          } else {
+            updateCandidateHiddenFields(unit, null);
+            renderResumeBox();
+          }
         }
         return normalized;
       }
@@ -2205,10 +2221,14 @@
       $("candidateRosterStatus").innerHTML = "Thí sinh đã chọn: <b>" + escapeHtml(participant.name) + "</b>" + (participant.position ? " • Chức vụ: <b>" + escapeHtml(participant.position) + "</b>" : "");
       if (startBtn) startBtn.disabled = !gateStatus.allowLogin;
     } else if (unit) {
-      const list = getParticipantListByUnit(unit);
+      const rawList = getParticipantListByUnit(unit);
+      const list = getCandidateExamListByUnit(unit);
       if (list.length) {
         $("candidateRosterStatus").className = "status info";
-        $("candidateRosterStatus").textContent = "Đơn vị này có " + list.length + " thí sinh trong danh sách. Hãy chọn tên để bắt đầu thi.";
+        $("candidateRosterStatus").textContent = "Đơn vị này có " + list.length + " thí sinh đủ điều kiện dự thi. Hãy chọn tên để bắt đầu thi.";
+      } else if (rawList.length) {
+        $("candidateRosterStatus").className = "status warning";
+        $("candidateRosterStatus").textContent = "Đơn vị này hiện không còn thí sinh đủ điều kiện dự thi trong tháng này.";
       } else {
         $("candidateRosterStatus").className = "status warning";
         $("candidateRosterStatus").textContent = "Đơn vị này chưa được Admin nhập danh sách thí sinh.";
@@ -2224,16 +2244,21 @@
   function renderCandidateNameOptions(selectedName = "") {
     const unit = $("unit").value.trim();
     const select = $("candidateNameSelect");
-    const roster = getParticipantListByUnit(unit);
+    const roster = getCandidateExamListByUnit(unit);
+    const rawRoster = getParticipantListByUnit(unit);
     if (!unit) {
       select.innerHTML = '<option value="">-- Chọn đơn vị trước --</option>';
       select.disabled = true;
+      select.value = "";
+      select.selectedIndex = 0;
       updateCandidateHiddenFields("", null);
       return;
     }
     if (!roster.length) {
-      select.innerHTML = '<option value="">-- Chưa có danh sách thí sinh --</option>';
+      select.innerHTML = `<option value="">${rawRoster.length ? '-- Không còn thí sinh đủ điều kiện --' : '-- Chưa có danh sách thí sinh --'}</option>`;
       select.disabled = true;
+      select.value = "";
+      select.selectedIndex = 0;
       updateCandidateHiddenFields(unit, null);
       return;
     }
@@ -2248,6 +2273,8 @@
         return;
       }
     }
+    select.value = "";
+    select.selectedIndex = 0;
     updateCandidateHiddenFields(unit, null);
   }
 
@@ -2265,31 +2292,20 @@
 
   async function refreshSelectedCandidateStatus() {
     const unit = $("unit").value.trim();
-    const roster = getParticipantListByUnit(unit);
+    const roster = getCandidateExamListByUnit(unit);
     const idx = Number($("candidateNameSelect").value);
     const participant = Number.isInteger(idx) && idx >= 0 ? roster[idx] : null;
     const fullName = participant?.name?.trim() || $("fullName").value.trim();
-    if (!unit || !fullName || !participant) {
-      return;
-    }
+    if (!unit || !fullName || !participant) return;
     const cacheKey = makeCandidateKey(unit, fullName) + "::" + getConfiguredExamPeriod().month;
-    if (state.candidateStatusCache.byKey[cacheKey]) {
-      applyCandidateEligibilityUi(state.candidateStatusCache.byKey[cacheKey], unit, fullName, participant);
-      return;
-    }
-    $("candidateRosterStatus").className = "status info";
-    $("candidateRosterStatus").textContent = "Đang kiểm tra trạng thái dự thi của thí sinh...";
-    const result = await checkCandidateMonthlyEligibility(unit, fullName, getConfiguredExamPeriod().month);
+    const result = { ok: true, alreadySubmitted: false, source: "eligiblePool" };
     state.candidateStatusCache.byKey[cacheKey] = result;
-    const currentUnit = $("unit").value.trim();
-    const currentName = $("fullName").value.trim();
-    if (makeCandidateKey(currentUnit, currentName) !== makeCandidateKey(unit, fullName)) return;
     applyCandidateEligibilityUi(result, unit, fullName, participant);
   }
 
   function handleCandidateNameChange() {
     const unit = $("unit").value.trim();
-    const roster = getParticipantListByUnit(unit);
+    const roster = getCandidateExamListByUnit(unit);
     const idx = Number($("candidateNameSelect").value);
     const participant = Number.isInteger(idx) && idx >= 0 ? roster[idx] : null;
     updateCandidateHiddenFields(unit, participant || null);
@@ -2704,6 +2720,13 @@
       if (data && data.ok && data.config) {
         state.examWindow = normalizeExamWindow(data.config);
         saveLocalExamWindow(state.examWindow);
+        if (data.candidatePool && typeof data.candidatePool === "object") {
+          const period = normalizeExamPeriod(data.candidatePool.period || state.examWindow.examPeriod || {});
+          const rowsByUnit = normalizeParticipantRegistry(data.candidatePool.rowsByUnit || {});
+          state.candidatePool = { month: period.month, round: period.round, byUnit: rowsByUnit };
+          state.candidatePoolPrefetchKey = period.month + "::" + period.round;
+          state.candidatePoolReady = true;
+        }
         applySettingsFromConfig();
         renderExamGateStatus();
         if (!silent) {
@@ -2765,13 +2788,10 @@
   }
 
   function renderWelcomePanel() {
-    const examPeriod = getConfiguredExamPeriod();
     const examInfo = getExamInfo();
     $("welcomePanel").innerHTML = `
-      <div style="border:1px solid #e3e8f2;border-radius:18px;background:linear-gradient(180deg,#fff,#fff8f8);padding:26px 28px;box-shadow:0 12px 28px rgba(16,24,40,.06);height:100%;">
-        <div style="text-align:center;color:var(--primary-dark);font-weight:700;font-size:32px;line-height:1.35;text-transform:uppercase;">KỲ THI TRỰC TUYẾN NGHIỆP VỤ CBKT</div>
-        <div style="text-align:center;color:var(--primary);font-weight:700;font-size:26px;line-height:1.4;text-transform:uppercase;margin-top:6px;">${escapeHtml(formatExamMonthTitle(examPeriod.month))}</div>
-        <div style="margin-top:24px;border:1px solid #ead3d3;border-radius:16px;background:#fff;padding:18px 20px;">
+      <div style="border:1px solid #e3e8f2;border-radius:18px;background:linear-gradient(180deg,#fff,#fff8f8);padding:18px 28px 26px;box-shadow:0 12px 28px rgba(16,24,40,.06);height:100%;">
+        <div style="margin-top:0;border:1px solid #ead3d3;border-radius:16px;background:#fff;padding:18px 20px;">
           <div style="font-size:22px;font-weight:700;color:var(--primary-dark);margin-bottom:10px;">1. Đối tượng</div>
           <div style="font-size:19px;line-height:1.7;">
             - Chỉ huy Đội 2; chỉ huy phụ trách công tác kiểm tra Đội 4, các Đội Chữa cháy và cứu nạn, cứu hộ khu vực;<br>
@@ -2812,7 +2832,7 @@
     renderDistributionEditor();
     renderWelcomePanel();
     if (questions.length) {
-      setStatus("success", "Ngân hàng câu hỏi gồm <b>" + questions.length + "</b> câu" + (sourceLabel ? " • " + sourceLabel : ""));
+      setStatus("", "");
     }
   }
 
@@ -2832,7 +2852,6 @@
     }
 
     try {
-      if (!usedCache) setStatus("info", "Đang tải gói câu hỏi từ <b>" + EXCEL_FILE + "</b>...");
       const resp = await fetch(EXCEL_FILE + "?v=" + Date.now());
       if (!resp.ok) throw new Error("Không tải được file " + EXCEL_FILE);
       const arrayBuffer = await resp.arrayBuffer();
@@ -3314,7 +3333,11 @@
     }
 
     const unit = $("unit").value.trim();
-    const participant = findParticipantByName(unit, $("fullName").value) || (() => {
+    const participant = findEligibleParticipantByName(unit, $("fullName").value) || (() => {
+      const roster = getCandidateExamListByUnit(unit);
+      const idx = Number($("candidateNameSelect").value);
+      return Number.isInteger(idx) && idx >= 0 ? roster[idx] : null;
+    })() || findParticipantByName(unit, $("fullName").value) || (() => {
       const roster = getParticipantListByUnit(unit);
       const idx = Number($("candidateNameSelect").value);
       return Number.isInteger(idx) && idx >= 0 ? roster[idx] : null;
@@ -3339,10 +3362,18 @@
     $("position").value = position;
 
     const examPeriod = getConfiguredExamPeriod();
-    const eligibility = await checkCandidateMonthlyEligibility(unit, fullName, examPeriod.month);
-    if (!eligibility.ok) {
-      alert(eligibility.message || "Không xác minh được trạng thái dự thi của thí sinh.");
-      return;
+    let eligibility = { ok: true, alreadySubmitted: false, source: "eligiblePool" };
+    if (state.candidatePoolReady) {
+      const eligibleParticipant = findEligibleParticipantByName(unit, fullName);
+      if (!eligibleParticipant) {
+        eligibility = { ok: true, alreadySubmitted: true, source: "eligiblePool" };
+      }
+    } else {
+      eligibility = await checkCandidateMonthlyEligibility(unit, fullName, examPeriod.month);
+      if (!eligibility.ok) {
+        alert(eligibility.message || "Không xác minh được trạng thái dự thi của thí sinh.");
+        return;
+      }
     }
     if (eligibility.alreadySubmitted) {
       clearActiveExam(unit, fullName);
@@ -4312,7 +4343,7 @@
       $("roleList").classList.add("hidden");
       $("candidateForm").classList.remove("hidden");
       updateMain("Thông tin thí sinh", "Chọn đơn vị và chọn tên trong danh sách để bắt đầu làm bài.");
-      refreshCandidateNameOptions($("fullName").value);
+      refreshCandidateNameOptions("");
       prefetchEligibleRosterAll();
       showOnly("welcomePanel");
       renderExamGateStatus();
@@ -4338,8 +4369,9 @@
     });
 
     $("btnStartExam").addEventListener("click", startExam);
-    $("unit").addEventListener("change", () => {
+    $("unit").addEventListener("change", async () => {
       refreshCandidateNameOptions("");
+      ensureCandidatePoolForUnit($("unit").value.trim());
     });
     $("unit").addEventListener("keydown", handleCandidateStartByEnter);
     $("candidateNameSelect").addEventListener("change", handleCandidateNameChange);
