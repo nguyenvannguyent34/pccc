@@ -1472,7 +1472,9 @@
     candidatePool: { month: "", round: "", byUnit: {} },
     candidateStatusCache: { month: "", byKey: {} },
     candidatePoolPrefetchKey: "",
-    candidatePoolReady: false
+    candidatePoolReady: false,
+    candidatePoolPromise: null,
+    preparedExamDraft: null
   };
 
   const $ = (id) => document.getElementById(id);
@@ -1832,7 +1834,8 @@
     resetCandidatePoolCache(force);
     const period = getConfiguredExamPeriod();
     const prefetchKey = period.month + "::" + period.round;
-    if (!force && state.candidatePoolPrefetchKey === prefetchKey && state.candidatePoolReady) return;
+    if (!force && state.candidatePoolPrefetchKey === prefetchKey && state.candidatePoolReady) return state.candidatePool.byUnit;
+    if (!force && state.candidatePoolPromise && state.candidatePoolPrefetchKey === prefetchKey) return state.candidatePoolPromise;
     state.candidatePoolPrefetchKey = prefetchKey;
 
     const registry = normalizeParticipantRegistry(state.examWindow.participantRegistry);
@@ -1842,29 +1845,35 @@
       }
     });
 
-    if (!SCRIPT_URL || SCRIPT_URL.includes("PASTE_YOUR")) return;
+    if (!SCRIPT_URL || SCRIPT_URL.includes("PASTE_YOUR")) return state.candidatePool.byUnit;
 
-    try {
-      const url = new URL(SCRIPT_URL);
-      url.searchParams.set("action", "eligibleRosterAll");
-      url.searchParams.set("examMonth", period.month);
-      url.searchParams.set("examRound", period.round);
-      url.searchParams.set("_ts", String(Date.now()));
-      const resp = await fetch(url.toString());
-      const data = await resp.json();
-      if (data && data.ok && data.rowsByUnit && typeof data.rowsByUnit === "object") {
-        const normalized = normalizeParticipantRegistry(data.rowsByUnit);
-        state.candidatePool = { month: period.month, round: period.round, byUnit: { ...registry, ...normalized } };
-        state.candidatePoolReady = true;
-        if (!$("candidateForm").classList.contains("hidden")) {
-          const selectedName = $("candidateNameSelect")?.value ? ($("fullName")?.value || "") : "";
-          refreshCandidateNameOptions(selectedName);
-          renderResumeBox();
+    state.candidatePoolPromise = (async () => {
+      try {
+        const url = new URL(SCRIPT_URL);
+        url.searchParams.set("action", "eligibleRosterAll");
+        url.searchParams.set("examMonth", period.month);
+        url.searchParams.set("examRound", period.round);
+        url.searchParams.set("_ts", String(Date.now()));
+        const resp = await fetch(url.toString());
+        const data = await resp.json();
+        if (data && data.ok && data.rowsByUnit && typeof data.rowsByUnit === "object") {
+          const normalized = normalizeParticipantRegistry(data.rowsByUnit);
+          state.candidatePool = { month: period.month, round: period.round, byUnit: { ...registry, ...normalized } };
+          state.candidatePoolReady = true;
+          if (!$("candidateForm").classList.contains("hidden")) {
+            const selectedName = $("candidateNameSelect")?.value ? ($("fullName")?.value || "") : "";
+            refreshCandidateNameOptions(selectedName);
+            renderResumeBox();
+          }
         }
+      } catch (err) {
+        console.warn("Không tải được danh sách thí sinh hợp lệ toàn bộ:", err);
+      } finally {
+        state.candidatePoolPromise = null;
       }
-    } catch (err) {
-      console.warn("Không tải được danh sách thí sinh hợp lệ toàn bộ:", err);
-    }
+      return state.candidatePool.byUnit;
+    })();
+    return state.candidatePoolPromise;
   }
 
   async function ensureCandidatePoolForUnit(unit) {
@@ -1881,41 +1890,55 @@
       state.candidatePool.byUnit[unit] = rawRoster;
     }
 
+    if (state.candidatePoolReady && Array.isArray(state.candidatePool.byUnit[unit])) {
+      return state.candidatePool.byUnit[unit];
+    }
+
+    if (state.candidatePoolPromise) {
+      try { await state.candidatePoolPromise; } catch (err) {}
+      return state.candidatePool.byUnit[unit] || rawRoster;
+    }
+
     if (!SCRIPT_URL || SCRIPT_URL.includes("PASTE_YOUR")) {
       return state.candidatePool.byUnit[unit];
     }
 
     const period = getConfiguredExamPeriod();
-    try {
-      const url = new URL(SCRIPT_URL);
-      url.searchParams.set("action", "eligibleRoster");
-      url.searchParams.set("unit", unit);
-      url.searchParams.set("examMonth", period.month);
-      url.searchParams.set("examRound", period.round);
-      url.searchParams.set("_ts", String(Date.now()));
-      const resp = await fetch(url.toString());
-      const data = await resp.json();
-      if (data && data.ok && Array.isArray(data.rows)) {
-        const normalized = normalizeParticipantRegistry({ [unit]: data.rows })[unit] || [];
-        state.candidatePool.byUnit[unit] = normalized;
-        state.candidatePoolReady = true;
-        if ($("unit").value.trim() === unit) {
-          const selectedName = $("candidateNameSelect")?.value ? $("fullName").value.trim() : "";
-          renderCandidateNameOptions(selectedName);
-          if (selectedName) {
-            handleCandidateNameChange();
-          } else {
-            updateCandidateHiddenFields(unit, null);
-            renderResumeBox();
+    state.candidatePoolPromise = (async () => {
+      try {
+        const url = new URL(SCRIPT_URL);
+        url.searchParams.set("action", "eligibleRoster");
+        url.searchParams.set("unit", unit);
+        url.searchParams.set("examMonth", period.month);
+        url.searchParams.set("examRound", period.round);
+        url.searchParams.set("_ts", String(Date.now()));
+        const resp = await fetch(url.toString());
+        const data = await resp.json();
+        if (data && data.ok && Array.isArray(data.rows)) {
+          const normalized = normalizeParticipantRegistry({ [unit]: data.rows })[unit] || [];
+          state.candidatePool.byUnit[unit] = normalized;
+          state.candidatePoolReady = true;
+          if ($("unit").value.trim() === unit) {
+            const selectedName = $("candidateNameSelect")?.value ? $("fullName").value.trim() : "";
+            renderCandidateNameOptions(selectedName);
+            if (selectedName) {
+              handleCandidateNameChange();
+            } else {
+              updateCandidateHiddenFields(unit, null);
+              renderResumeBox();
+            }
           }
+          return normalized;
         }
-        return normalized;
+      } catch (err) {
+        console.warn("Không lấy được danh sách thí sinh hợp lệ:", err);
+      } finally {
+        state.candidatePoolPromise = null;
       }
-    } catch (err) {
-      console.warn("Không lấy được danh sách thí sinh hợp lệ:", err);
-    }
+      return state.candidatePool.byUnit[unit] || rawRoster;
+    })();
 
-    return state.candidatePool.byUnit[unit] || rawRoster;
+    return state.candidatePoolPromise;
   }
 
   function refreshCandidateNameOptions(selectedName = "") {
@@ -2310,6 +2333,7 @@
     const participant = Number.isInteger(idx) && idx >= 0 ? roster[idx] : null;
     updateCandidateHiddenFields(unit, participant || null);
     renderResumeBox();
+    prepareExamDraftSoon();
     refreshSelectedCandidateStatus();
   }
 
@@ -2749,6 +2773,8 @@
     resetCandidatePoolCache(true);
     saveLocalExamWindow(state.examWindow);
     applySettingsFromConfig();
+    invalidatePreparedExamDraft();
+    prepareExamDraftSoon();
     renderExamGateStatus();
 
     const statusBox = $("adminGateSaveStatus");
@@ -2845,6 +2871,7 @@
         if (Array.isArray(cached.questions) && cached.questions.length) {
           setQuestions(cached.questions, "nạp nhanh từ bộ nhớ tạm");
           usedCache = true;
+          prepareExamDraftSoon();
         }
       }
     } catch (err) {
@@ -2872,6 +2899,7 @@
 
       sessionStorage.setItem(QUESTION_CACHE_KEY, JSON.stringify({ questions, savedAt: new Date().toISOString() }));
       setQuestions(questions, "đồng bộ mới nhất");
+      prepareExamDraftSoon();
     } catch (err) {
       if (!state.allQuestions.length) {
         setStatus("error",
@@ -2990,6 +3018,53 @@
     } else {
       $("distributionSummary").textContent = "Tổng tỷ lệ hiện tại: " + totalPercent + "%. Muốn bốc đề theo chuyên đề, tổng tỷ lệ phải đúng 100%.";
     }
+  }
+
+
+  function getPreparedExamSignature() {
+    return JSON.stringify({
+      totalQuestions: getQuestionCount(),
+      allQuestionsLength: state.allQuestions.length,
+      groupDistribution: state.settings.groupDistribution || {}
+    });
+  }
+
+  function invalidatePreparedExamDraft() {
+    state.preparedExamDraft = null;
+  }
+
+  function prepareExamDraftSoon() {
+    if (!state.allQuestions.length) return;
+    const signature = getPreparedExamSignature();
+    if (state.preparedExamDraft && state.preparedExamDraft.signature === signature && Array.isArray(state.preparedExamDraft.questions) && state.preparedExamDraft.questions.length === getQuestionCount()) {
+      return;
+    }
+    const runner = () => {
+      try {
+        state.preparedExamDraft = {
+          signature,
+          questions: buildQuestionSet()
+        };
+      } catch (err) {
+        console.warn("Không chuẩn bị sẵn đề thi được:", err);
+      }
+    };
+    if (typeof requestIdleCallback === "function") {
+      requestIdleCallback(runner, { timeout: 300 });
+    } else {
+      setTimeout(runner, 0);
+    }
+  }
+
+  function consumePreparedExamDraft() {
+    const signature = getPreparedExamSignature();
+    if (state.preparedExamDraft && state.preparedExamDraft.signature === signature && Array.isArray(state.preparedExamDraft.questions) && state.preparedExamDraft.questions.length === getQuestionCount()) {
+      const draft = state.preparedExamDraft.questions;
+      state.preparedExamDraft = null;
+      prepareExamDraftSoon();
+      return draft;
+    }
+    return buildQuestionSet();
   }
 
   function buildQuestionSet() {
@@ -3325,93 +3400,96 @@
   }
 
   async function startExam() {
-    const gateStatus = getExamWindowStatus();
-    if (!gateStatus.allowLogin) {
-      alert(gateStatus.message);
-      renderExamGateStatus();
-      return;
+    const startBtn = $("btnStartExam");
+    if (startBtn) {
+      startBtn.disabled = true;
+      startBtn.dataset.originalText = startBtn.dataset.originalText || startBtn.textContent;
+      startBtn.textContent = "Đang vào thi...";
     }
-
-    const unit = $("unit").value.trim();
-    const participant = findEligibleParticipantByName(unit, $("fullName").value) || (() => {
-      const roster = getCandidateExamListByUnit(unit);
-      const idx = Number($("candidateNameSelect").value);
-      return Number.isInteger(idx) && idx >= 0 ? roster[idx] : null;
-    })() || findParticipantByName(unit, $("fullName").value) || (() => {
-      const roster = getParticipantListByUnit(unit);
-      const idx = Number($("candidateNameSelect").value);
-      return Number.isInteger(idx) && idx >= 0 ? roster[idx] : null;
-    })();
-
-    const fullName = participant?.name?.trim() || "";
-    const position = (participant?.position || DEFAULT_POSITION).trim();
-
-    if (!unit) {
-      alert("Vui lòng chọn đơn vị.");
-      return;
-    }
-    if (!getParticipantListByUnit(unit).length) {
-      alert("Đơn vị này chưa được Admin nhập danh sách thí sinh.");
-      return;
-    }
-    if (!fullName) {
-      alert("Vui lòng chọn tên thí sinh trong danh sách.");
-      return;
-    }
-    $("fullName").value = fullName;
-    $("position").value = position;
-
-    const examPeriod = getConfiguredExamPeriod();
-    let eligibility = { ok: true, alreadySubmitted: false, source: "eligiblePool" };
-    if (state.candidatePoolReady) {
-      const eligibleParticipant = findEligibleParticipantByName(unit, fullName);
-      if (!eligibleParticipant) {
-        eligibility = { ok: true, alreadySubmitted: true, source: "eligiblePool" };
-      }
-    } else {
-      eligibility = await checkCandidateMonthlyEligibility(unit, fullName, examPeriod.month);
-      if (!eligibility.ok) {
-        alert(eligibility.message || "Không xác minh được trạng thái dự thi của thí sinh.");
+    try {
+      const gateStatus = getExamWindowStatus();
+      if (!gateStatus.allowLogin) {
+        alert(gateStatus.message);
+        renderExamGateStatus();
         return;
       }
-    }
-    if (eligibility.alreadySubmitted) {
-      clearActiveExam(unit, fullName);
-      showCenterAlert("Thí sinh này đã tham gia kỳ thi tháng " + examPeriod.month + " nên không thể đăng nhập thi lại.");
-      return;
-    }
 
-    const savedExam = readActiveExam(unit, fullName);
-    if (savedExam) {
-      restoreSavedExam(unit, fullName);
-      return;
+      const unit = $("unit").value.trim();
+      const participant = findEligibleParticipantByName(unit, $("fullName").value) || (() => {
+        const roster = getCandidateExamListByUnit(unit);
+        const idx = Number($("candidateNameSelect").value);
+        return Number.isInteger(idx) && idx >= 0 ? roster[idx] : null;
+      })() || findParticipantByName(unit, $("fullName").value) || (() => {
+        const roster = getParticipantListByUnit(unit);
+        const idx = Number($("candidateNameSelect").value);
+        return Number.isInteger(idx) && idx >= 0 ? roster[idx] : null;
+      })();
+
+      const fullName = participant?.name?.trim() || "";
+      const position = (participant?.position || DEFAULT_POSITION).trim();
+
+      if (!unit) {
+        alert("Vui lòng chọn đơn vị.");
+        return;
+      }
+      if (!getParticipantListByUnit(unit).length) {
+        alert("Đơn vị này chưa được Admin nhập danh sách thí sinh.");
+        return;
+      }
+      if (!fullName) {
+        alert("Vui lòng chọn tên thí sinh trong danh sách.");
+        return;
+      }
+      $("fullName").value = fullName;
+      $("position").value = position;
+
+      const examPeriod = getConfiguredExamPeriod();
+      if (state.candidatePoolReady) {
+        const eligibleParticipant = findEligibleParticipantByName(unit, fullName);
+        if (!eligibleParticipant) {
+          clearActiveExam(unit, fullName);
+          showCenterAlert("Thí sinh này đã tham gia kỳ thi tháng " + examPeriod.month + " nên không thể đăng nhập thi lại.");
+          return;
+        }
+      }
+
+      const savedExam = readActiveExam(unit, fullName);
+      if (savedExam) {
+        restoreSavedExam(unit, fullName);
+        return;
+      }
+
+      if (!state.allQuestions.length) {
+        alert("Gói câu hỏi chưa sẵn sàng.");
+        return;
+      }
+      if (getQuestionCount() > state.allQuestions.length) {
+        alert("Số câu cấu hình lớn hơn số câu hiện có trong ngân hàng.");
+        return;
+      }
+
+      resetExamState();
+      state.settings = readAdminSettingsForm ? state.settings : state.settings;
+      state.candidate = { fullName, unit, position };
+      state.examQuestions = consumePreparedExamDraft();
+      state.deadlineAt = Date.now() + (state.settings.timeMinutes * 60 * 1000);
+
+      $("candidateNameView").textContent = fullName;
+      $("candidateUnitView").textContent = unit;
+      $("candidatePositionView").textContent = position;
+
+      updateMain("Đang làm bài thi", buildExamCycleLabel(examPeriod.month, examPeriod.round));
+      showOnly("examPanel");
+      renderQuestion();
+      renderTimer();
+      startTimer();
+      setTimeout(saveActiveExam, 0);
+    } finally {
+      if (startBtn) {
+        startBtn.textContent = startBtn.dataset.originalText || "Bắt đầu thi";
+        startBtn.disabled = !getExamWindowStatus().allowLogin ? true : !$("fullName").value.trim();
+      }
     }
-
-    if (!state.allQuestions.length) {
-      alert("Gói câu hỏi chưa sẵn sàng.");
-      return;
-    }
-    if (getQuestionCount() > state.allQuestions.length) {
-      alert("Số câu cấu hình lớn hơn số câu hiện có trong ngân hàng.");
-      return;
-    }
-
-    resetExamState();
-    state.settings = readAdminSettingsForm ? state.settings : state.settings;
-    state.candidate = { fullName, unit, position };
-    state.examQuestions = buildQuestionSet();
-    state.deadlineAt = Date.now() + (state.settings.timeMinutes * 60 * 1000);
-
-    $("candidateNameView").textContent = fullName;
-    $("candidateUnitView").textContent = unit;
-    $("candidatePositionView").textContent = position;
-
-    updateMain("Đang làm bài thi", buildExamCycleLabel(examPeriod.month, examPeriod.round));
-    showOnly("examPanel");
-    renderQuestion();
-    renderTimer();
-    saveActiveExam();
-    startTimer();
   }
 
   function restoreSavedExam(unit, fullName) {
@@ -4340,6 +4418,7 @@
   function initEvents() {
     $("btnCandidateMode").addEventListener("click", () => {
       fetchExamWindowConfig(true);
+      prefetchEligibleRosterAll();
       $("roleList").classList.add("hidden");
       $("candidateForm").classList.remove("hidden");
       updateMain("Thông tin thí sinh", "Chọn đơn vị và chọn tên trong danh sách để bắt đầu làm bài.");
@@ -4639,7 +4718,7 @@
   updateFullscreenState();
   syncExamTopupVisibility("welcomePanel");
   renderExamGateStatus();
-  fetchExamWindowConfig(true);
+  fetchExamWindowConfig(true).then(() => prefetchEligibleRosterAll()).catch(() => {});
   setInterval(renderExamGateStatus, 30000);
   loadQuestionsFromExcel();
 })();
