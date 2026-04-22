@@ -841,7 +841,26 @@
         </div>
         <div class="card-body">
 
-          <div id="welcomePanel"></div>
+                    <div id="welcomePanel">
+            <div style="border:1px solid #e3e8f2;border-radius:18px;background:linear-gradient(180deg,#fff,#fff8f8);padding:18px 28px 26px;box-shadow:0 12px 28px rgba(16,24,40,.06);height:100%;">
+              <div style="margin-top:0;border:1px solid #ead3d3;border-radius:16px;background:#fff;padding:18px 20px;">
+                <div style="font-size:22px;font-weight:700;color:var(--primary-dark);margin-bottom:10px;">1. Đối tượng</div>
+                <div style="font-size:19px;line-height:1.7;">
+                  - Chỉ huy Đội 2; chỉ huy phụ trách công tác kiểm tra Đội 4, các Đội Chữa cháy và cứu nạn, cứu hộ khu vực;<br>
+                  - Cán bộ, chiến sĩ đang trực tiếp, dự kiến phân công thực hiện nhiệm vụ kiểm tra về PCCC thuộc Phòng Cảnh sát PCCC và CNCH.
+                </div>
+              </div>
+              <div style="margin-top:18px;border:1px solid #ead3d3;border-radius:16px;background:#fff;padding:18px 20px;">
+                <div style="font-size:22px;font-weight:700;color:var(--primary-dark);margin-bottom:10px;">2. Nội dung kiểm tra</div>
+                <div style="font-size:19px;line-height:1.7;">
+                  - Các văn bản quy phạm pháp luật về PCCC và CNCH còn hiệu lực;<br>
+                  - Quy định về xử phạt vi phạm hành chính trong lĩnh vực PCCC và CNCH;<br>
+                  - Các tiêu chuẩn, quy chuẩn về PCCC và CNCH còn hiệu lực;<br>
+                  - Các tình huống thực tế khi tổ chức kiểm tra về PCCC.
+                </div>
+              </div>
+            </div>
+          </div>
 
           <div id="examPanel" class="hidden">
             <div class="exam-header">
@@ -1441,6 +1460,3531 @@
     </div>
   </div>
 
-<script src="script.js"></script>
+<script>
+(() => {
+  const EXCEL_FILE = "questions.xlsx";
+  const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxJ29Mp2uDDurchQAyGLQN7nAg3BApihF9gXHmq2QC-ra92nAToJ328OTYrt4tTSgH7Rg/exec";
+  const ADMIN_PASSWORD = "101212019";
+  const POINTS_PER_CORRECT = 0.5;
+
+  const EXAM_CONFIG_STORAGE_KEY = "pc07_exam_window_config";
+  const ACTIVE_EXAM_STORAGE_KEY = "pc07_active_exam_state";
+  const ACTIVE_EXAM_STORAGE_PREFIX = "pc07_active_exam_state::";
+  const QUESTION_CACHE_KEY = "pc07_question_cache_v2";
+
+  const DEFAULT_SETTINGS = {
+    totalQuestions: 20,
+    timeMinutes: 15,
+    passScore: 5,
+    groupDistribution: {}
+  };
+
+  const DEFAULT_EXAM_INFO = {
+    content: `- Các văn bản quy phạm pháp luật về PCCC và CNCH còn hiệu lực;
+- Quy định về xử phạt vi phạm hành chính trong lĩnh vực PCCC và CNCH;
+- Các tiêu chuẩn, quy chuẩn về PCCC và CNCH còn hiệu lực;
+- Các tình huống thực tế khi tổ chức kiểm tra về PCCC.`
+  };
+
+  const EXAM_ROUND_OPTIONS = ["Chính", "Bổ sung", "Bổ sung 2"];
+
+  const DEFAULT_POSITION = "Cán bộ";
+
+  const state = {
+    allQuestions: [],
+    categories: [],
+    examQuestions: [],
+    answers: {},
+    flags: {},
+    currentIndex: 0,
+    deadlineAt: null,
+    timerId: null,
+    candidate: { fullName: "", unit: "", position: "" },
+    submitted: false,
+    adminRows: [],
+    filteredAdminRows: [],
+    lastResultRows: [],
+    reportMonth: "",
+    examWindow: {
+      enabled: false,
+      start: "",
+      end: "",
+      updatedAt: "",
+      examSettings: { ...DEFAULT_SETTINGS },
+      examPeriod: { month: "", round: "Chính" },
+      examInfo: { ...DEFAULT_EXAM_INFO },
+      participantRegistry: {},
+      unitExamSettings: {}
+    },
+    settings: { ...DEFAULT_SETTINGS },
+    candidatePool: { month: "", round: "", byUnit: {} },
+    candidateStatusCache: { month: "", byKey: {} },
+    candidatePoolPrefetchKey: "",
+    candidatePoolReady: false,
+    candidatePoolPromise: null,
+    preparedExamDraft: null
+  };
+
+  const $ = (id) => document.getElementById(id);
+
+  function inferToastType(message) {
+    const text = String(message || '').toLowerCase();
+    if (!text) return 'info';
+    if (/(sai mật khẩu|không tải|không lưu|lỗi|thất bại|không thể|không tìm thấy)/.test(text)) return 'error';
+    if (/(vui lòng|hãy chọn|chưa có|chưa được|không còn|hết thời gian|chưa cấu hình|cục bộ|cảnh báo)/.test(text)) return 'warning';
+    if (/(đã |thành công|đồng bộ|cập nhật|thêm|xóa|khôi phục|nộp bài)/.test(text)) return 'success';
+    return 'info';
+  }
+
+  function showToast(message, type = 'info', title = '') {
+    const container = $('toastContainer');
+    if (!container) return;
+    const tone = ['success','warning','error','info'].includes(type) ? type : inferToastType(message);
+    const titleMap = { success: 'Thành công', warning: 'Lưu ý', error: 'Lỗi', info: 'Thông báo' };
+    const toast = document.createElement('div');
+    toast.className = 'toast ' + tone;
+    toast.innerHTML = `
+      <div class="toast-body">
+        <div class="toast-title"></div>
+        <div class="toast-message"></div>
+      </div>
+      <button type="button" class="toast-close" aria-label="Đóng thông báo">×</button>
+    `;
+    toast.querySelector('.toast-title').textContent = title || titleMap[tone] || 'Thông báo';
+    toast.querySelector('.toast-message').textContent = String(message || '');
+    const removeToast = () => {
+      if (!toast.isConnected || toast.classList.contains('removing')) return;
+      toast.classList.add('removing');
+      setTimeout(() => toast.remove(), 180);
+    };
+    toast.querySelector('.toast-close').addEventListener('click', removeToast);
+    container.appendChild(toast);
+    setTimeout(removeToast, 3400);
+  }
+
+  function showCenterAlert(message, title = "Thông báo") {
+    const overlay = $("centerAlertModal");
+    if (!overlay) return;
+    $("centerAlertTitle").textContent = title || "Thông báo";
+    $("centerAlertMessage").textContent = String(message || "");
+    overlay.classList.remove("hidden");
+    const backBtn = $("btnCenterAlertBack");
+    if (backBtn) setTimeout(() => backBtn.focus(), 0);
+  }
+
+  function hideCenterAlert() {
+    const overlay = $("centerAlertModal");
+    if (!overlay) return;
+    overlay.classList.add("hidden");
+  }
+
+  window.showToast = showToast;
+  window.alert = function(message) {
+    showToast(message, inferToastType(message));
+  };
+  const loadStatus = $("loadStatus");
+  const centerAlertBackButton = $("btnCenterAlertBack");
+  if (centerAlertBackButton) centerAlertBackButton.addEventListener("click", hideCenterAlert);
+  const mainHeader = $("mainHeader");
+  const mainTitle = $("mainTitle");
+  const mainSub = $("mainSub");
+
+  function setStatus(type, html) {
+    const hasContent = String(html || "").trim();
+    loadStatus.className = hasContent ? ("status " + type) : "hidden";
+    loadStatus.innerHTML = hasContent || "";
+  }
+
+  function escapeHtml(value) {
+    return String(value ?? "")
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&#039;");
+  }
+
+  function updateMain(title, sub) {
+    mainTitle.textContent = title;
+    mainSub.textContent = sub;
+  }
+
+  function syncLayoutMode(sectionId) {
+    const focusMode = sectionId === "examPanel" || sectionId === "resultPanel" || sectionId === "adminPanel";
+    document.body.classList.toggle("focus-mode", focusMode);
+  }
+
+  function showOnly(sectionId) {
+    ["welcomePanel","examPanel","resultPanel","adminPanel"].forEach(id => $(id).classList.add("hidden"));
+    $(sectionId).classList.remove("hidden");
+    if (mainHeader) {
+      mainHeader.style.display = sectionId === "welcomePanel" ? "block" : "none";
+    }
+    syncLayoutMode(sectionId);
+    syncExamTopupVisibility(sectionId);
+  }
+
+  function resetSidePanels() {
+    $("candidateForm").classList.add("hidden");
+    $("adminLogin").classList.add("hidden");
+    $("roleList").classList.remove("hidden");
+  }
+
+  function formatDateTime(isoString) {
+    if (!isoString) return "";
+    const d = new Date(isoString);
+    if (isNaN(d)) return isoString;
+    return d.toLocaleString("vi-VN");
+  }
+
+  function formatSeconds(seconds) {
+    const safeSeconds = Math.max(0, Math.round(Number(seconds) || 0));
+    const mins = Math.floor(safeSeconds / 60);
+    const secs = safeSeconds % 60;
+    return String(mins).padStart(2, "0") + ":" + String(secs).padStart(2, "0");
+  }
+
+  function formatUsedSecondsText(seconds) {
+    const safeSeconds = Math.max(0, Math.round(Number(seconds) || 0));
+    return safeSeconds + " giây";
+  }
+
+  function toLocalDateTimeValue(date) {
+    const d = date instanceof Date ? date : new Date(date);
+    if (isNaN(d)) return "";
+    const pad = (v) => String(v).padStart(2, "0");
+    return d.getFullYear() + "-" +
+      pad(d.getMonth() + 1) + "-" +
+      pad(d.getDate()) + "T" +
+      pad(d.getHours()) + ":" +
+      pad(d.getMinutes());
+  }
+
+  function parseLocalDateTime(value) {
+    if (!value) return null;
+    const d = new Date(value);
+    return isNaN(d) ? null : d;
+  }
+
+  function getCurrentMonthValue(baseDate = new Date()) {
+    const d = baseDate instanceof Date ? baseDate : new Date(baseDate);
+    if (isNaN(d)) return "";
+    return d.toISOString().slice(0, 7);
+  }
+
+  function normalizeMonthValue(value, fallback = "") {
+    const raw = String(value || "").trim();
+    if (/^\d{4}-\d{2}$/.test(raw)) return raw;
+    return fallback || getCurrentMonthValue();
+  }
+
+  function normalizeExamRound(value) {
+    const raw = String(value || "").trim();
+    return EXAM_ROUND_OPTIONS.includes(raw) ? raw : EXAM_ROUND_OPTIONS[0];
+  }
+
+  function normalizeExamPeriod(period) {
+    const src = period && typeof period === "object" ? period : {};
+    return {
+      month: normalizeMonthValue(src.month || src.examMonth || src.periodMonth, getCurrentMonthValue()),
+      round: normalizeExamRound(src.round || src.examRound || src.session || src.dotThi)
+    };
+  }
+
+  function buildExamCycleLabel(monthValue, roundValue) {
+    const month = normalizeMonthValue(monthValue, getCurrentMonthValue());
+    const round = normalizeExamRound(roundValue);
+    const [year, mon] = month.split("-");
+    return "Tháng " + mon + "/" + year + " • Đợt " + round;
+  }
+
+  function formatExamMonthTitle(monthValue) {
+    const month = normalizeMonthValue(monthValue, getCurrentMonthValue());
+    const [year, mon] = month.split("-");
+    return "THÁNG " + Number(mon) + "/" + year;
+  }
+
+  function normalizeExamInfo(info) {
+    const src = info && typeof info === "object" ? info : {};
+    const content = String(src.content || src.examContent || src.welcomeContent || DEFAULT_EXAM_INFO.content).trim();
+    return {
+      content: content || DEFAULT_EXAM_INFO.content
+    };
+  }
+
+  function getExamInfo() {
+    return normalizeExamInfo(state.examWindow?.examInfo || {});
+  }
+
+  function formatMultilineHtml(value) {
+    return escapeHtml(String(value || "")).replace(/\n/g, "<br>");
+  }
+
+  function setHomeHeader() {
+    updateMain("KỲ THI TRỰC TUYẾN NGHIỆP VỤ KIỂM TRA VỀ PCCC", formatExamMonthTitle(getConfiguredExamPeriod().month));
+  }
+
+  function syncHomeHeaderIfDefaultView() {
+    if (!$('welcomePanel') || $('welcomePanel').classList.contains('hidden')) return;
+    if (!$("candidateForm").classList.contains("hidden")) return;
+    if (!$("adminLogin").classList.contains("hidden")) return;
+    setHomeHeader();
+  }
+
+  function getConfiguredExamPeriod() {
+    return normalizeExamPeriod(state.examWindow?.examPeriod || {});
+  }
+
+  function getExamRoundIndex(roundValue) {
+    return EXAM_ROUND_OPTIONS.indexOf(normalizeExamRound(roundValue));
+  }
+
+  function getPreviousRounds(roundValue) {
+    const idx = getExamRoundIndex(roundValue);
+    return idx > 0 ? EXAM_ROUND_OPTIONS.slice(0, idx) : [];
+  }
+
+  function makeCandidateKey(unit, fullName) {
+    return String(unit || "").trim().replace(/\s+/g, " ").toLocaleLowerCase("vi") + "||" + String(fullName || "").trim().replace(/\s+/g, " ").toLocaleLowerCase("vi");
+  }
+
+  function resetCandidatePoolCache(force = false) {
+    const period = getConfiguredExamPeriod();
+    if (force || state.candidatePool.month !== period.month || state.candidatePool.round !== period.round) {
+      state.candidatePool = { month: period.month, round: period.round, byUnit: {} };
+      state.candidatePoolPrefetchKey = "";
+      state.candidatePoolReady = false;
+    }
+  }
+
+  function resetCandidateStatusCache(force = false) {
+    const period = getConfiguredExamPeriod();
+    if (force || state.candidateStatusCache.month !== period.month) {
+      state.candidateStatusCache = { month: period.month, byKey: {} };
+    }
+  }
+
+  function getSelectedReportMonth() {
+    const input = $("reportMonth");
+    return normalizeMonthValue(input?.value || state.reportMonth || getConfiguredExamPeriod().month, getConfiguredExamPeriod().month);
+  }
+
+  function getSelectedReportRound() {
+    return String($("filterExamRound")?.value || "").trim();
+  }
+
+  function shuffle(arr) {
+    const a = [...arr];
+    for (let i = a.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [a[i], a[j]] = [a[j], a[i]];
+    }
+    return a;
+  }
+
+  function normalizeNumber(value, fallback, min = 0) {
+    const num = Number(value);
+    return Number.isFinite(num) ? Math.max(min, num) : fallback;
+  }
+
+  function normalizeExamSettings(settings) {
+    const src = settings && typeof settings === "object" ? settings : {};
+    const totalQuestions = Math.max(1, Math.round(normalizeNumber(src.totalQuestions, DEFAULT_SETTINGS.totalQuestions, 1)));
+    let groupDistribution = src.groupDistribution && typeof src.groupDistribution === "object" ? { ...src.groupDistribution } : {};
+    const distValues = Object.values(groupDistribution).map(v => Math.max(0, Number(v) || 0));
+    const distTotal = distValues.reduce((sum, v) => sum + v, 0);
+    if (distTotal > 0 && distTotal !== 100 && Math.round(distTotal) === totalQuestions) {
+      const converted = {};
+      Object.entries(groupDistribution).forEach(([cat, count]) => {
+        converted[cat] = Math.round(((Math.max(0, Number(count) || 0) / totalQuestions) * 100) * 100) / 100;
+      });
+      groupDistribution = converted;
+    }
+    return {
+      totalQuestions,
+      timeMinutes: Math.max(1, Math.round(normalizeNumber(src.timeMinutes, DEFAULT_SETTINGS.timeMinutes, 1))),
+      passScore: Number(normalizeNumber(src.passScore, DEFAULT_SETTINGS.passScore, 0).toFixed(1)),
+      groupDistribution
+    };
+  }
+
+  function normalizeParticipantRegistry(registry) {
+    const normalized = {};
+    let source = registry;
+    if (typeof source === "string") {
+      try {
+        source = JSON.parse(source);
+      } catch (err) {
+        source = {};
+      }
+    }
+    if (!source || typeof source !== "object") return normalized;
+    Object.entries(source).forEach(([unit, list]) => {
+      const unitName = String(unit || "").trim();
+      if (!unitName) return;
+      const rows = Array.isArray(list) ? list : [];
+      const dedup = new Map();
+      rows.forEach(item => {
+        const rawName = typeof item === "string" ? item : (item?.name || item?.fullName || "");
+        const name = String(rawName || "").trim().replace(/\s+/g, " ");
+        if (!name) return;
+        const position = String(typeof item === "string" ? "" : (item?.position || item?.title || "" )).trim() || DEFAULT_POSITION;
+        const key = name.toLocaleLowerCase("vi");
+        if (!dedup.has(key)) {
+          dedup.set(key, { name, position });
+        }
+      });
+      normalized[unitName] = Array.from(dedup.values()).sort((a, b) => a.name.localeCompare(b.name, "vi"));
+    });
+    return normalized;
+  }
+
+  
+function normalizeUnitExamSettingsMap(rawMap, baseSettings = DEFAULT_SETTINGS) {
+    let source = rawMap;
+    if (typeof source === "string") {
+      try {
+        source = JSON.parse(source);
+      } catch (err) {
+        source = {};
+      }
+    }
+    if (!source || typeof source !== "object") return {};
+    const normalized = {};
+    Object.entries(source).forEach(([unit, value]) => {
+      const unitName = String(unit || "").trim();
+      if (!unitName || !value || typeof value !== "object") return;
+      const merged = normalizeExamSettings({
+        ...normalizeExamSettings(baseSettings),
+        passScore: normalizeExamSettings(baseSettings).passScore,
+        groupDistribution: value.groupDistribution || value.distribution || value.topicDistribution || {}
+      });
+      normalized[unitName] = {
+        groupDistribution: { ...(merged.groupDistribution || {}) }
+      };
+    });
+    return normalized;
+  }
+
+  function normalizeExamWindow(config) {
+    const fallback = {
+      enabled: false,
+      start: "",
+      end: "",
+      updatedAt: "",
+      examSettings: { ...DEFAULT_SETTINGS },
+      examPeriod: normalizeExamPeriod({}),
+      examInfo: { ...DEFAULT_EXAM_INFO },
+      participantRegistry: {},
+      unitExamSettings: {}
+    };
+    if (!config || typeof config !== "object") return fallback;
+    const examSettings = normalizeExamSettings(config.examSettings || config.settings || config.examConfig);
+    return {
+      enabled: Boolean(config.enabled),
+      start: config.start || "",
+      end: config.end || "",
+      updatedAt: config.updatedAt || "",
+      examSettings,
+      examPeriod: normalizeExamPeriod(config.examPeriod || config.period || config.examCycle || {}),
+      examInfo: normalizeExamInfo(config.examInfo || config.welcomeInfo || config.examNotice || {}),
+      participantRegistry: normalizeParticipantRegistry(config.participantRegistry || config.candidateRegistry || config.rosterByUnit || {}),
+      unitExamSettings: normalizeUnitExamSettingsMap(config.unitExamSettings || config.unitSettings || config.examSettingsByUnit || {}, examSettings)
+    };
+  }
+
+  function getGlobalExamSettings() {
+    return normalizeExamSettings(state.examWindow?.examSettings || DEFAULT_SETTINGS);
+  }
+
+  function getUnitExamSettings(unit) {
+    const key = String(unit || "").trim();
+    if (!key) return null;
+    const overrides = normalizeUnitExamSettingsMap(state.examWindow?.unitExamSettings || {}, getGlobalExamSettings());
+    return overrides[key] ? { ...overrides[key] } : null;
+  }
+
+  function getEffectiveExamSettingsForUnit(unit) {
+    const base = getGlobalExamSettings();
+    const override = getUnitExamSettings(unit);
+    if (!override) return base;
+    return normalizeExamSettings({
+      ...base,
+      passScore: base.passScore,
+      groupDistribution: override.groupDistribution || {}
+    });
+  }
+
+  function getUnitOptions() {
+    return [...$("unit").options].map(option => option.value).filter(Boolean);
+  }
+
+  function getParticipantListByUnit(unit) {
+    const registry = normalizeParticipantRegistry(state.examWindow.participantRegistry);
+    return unit ? (registry[unit] || []) : [];
+  }
+
+  function getCandidateExamListByUnit(unit) {
+    resetCandidatePoolCache();
+    const cached = unit ? state.candidatePool.byUnit[unit] : null;
+    return Array.isArray(cached) ? cached : getParticipantListByUnit(unit);
+  }
+
+  async function prefetchEligibleRosterAll(force = false) {
+    resetCandidatePoolCache(force);
+    const period = getConfiguredExamPeriod();
+    const prefetchKey = period.month + "::" + period.round;
+    if (!force && state.candidatePoolPrefetchKey === prefetchKey && state.candidatePoolReady) return state.candidatePool.byUnit;
+    if (!force && state.candidatePoolPromise && state.candidatePoolPrefetchKey === prefetchKey) return state.candidatePoolPromise;
+    state.candidatePoolPrefetchKey = prefetchKey;
+
+    const registry = normalizeParticipantRegistry(state.examWindow.participantRegistry);
+    Object.keys(registry).forEach(unit => {
+      if (!Array.isArray(state.candidatePool.byUnit[unit])) {
+        state.candidatePool.byUnit[unit] = registry[unit] || [];
+      }
+    });
+
+    if (!SCRIPT_URL || SCRIPT_URL.includes("PASTE_YOUR")) return state.candidatePool.byUnit;
+
+    state.candidatePoolPromise = (async () => {
+      try {
+        const url = new URL(SCRIPT_URL);
+        url.searchParams.set("action", "eligibleRosterAll");
+        url.searchParams.set("examMonth", period.month);
+        url.searchParams.set("examRound", period.round);
+        url.searchParams.set("_ts", String(Date.now()));
+        const resp = await fetch(url.toString());
+        const data = await resp.json();
+        if (data && data.ok && data.rowsByUnit && typeof data.rowsByUnit === "object") {
+          const normalized = normalizeParticipantRegistry(data.rowsByUnit);
+          state.candidatePool = { month: period.month, round: period.round, byUnit: { ...registry, ...normalized } };
+          state.candidatePoolReady = true;
+          if (!$("candidateForm").classList.contains("hidden")) {
+            const selectedName = $("candidateNameSelect")?.value ? ($("fullName")?.value || "") : "";
+            refreshCandidateNameOptions(selectedName);
+            renderResumeBox();
+          }
+        }
+      } catch (err) {
+        console.warn("Không tải được danh sách thí sinh hợp lệ toàn bộ:", err);
+      } finally {
+        state.candidatePoolPromise = null;
+      }
+      return state.candidatePool.byUnit;
+    })();
+    return state.candidatePoolPromise;
+  }
+
+  async function ensureCandidatePoolForUnit(unit) {
+    resetCandidatePoolCache();
+    if (!unit) return [];
+
+    const rawRoster = getParticipantListByUnit(unit);
+    if (!rawRoster.length) {
+      state.candidatePool.byUnit[unit] = [];
+      return [];
+    }
+
+    if (!Array.isArray(state.candidatePool.byUnit[unit])) {
+      state.candidatePool.byUnit[unit] = rawRoster;
+    }
+
+    if (state.candidatePoolReady && Array.isArray(state.candidatePool.byUnit[unit])) {
+      return state.candidatePool.byUnit[unit];
+    }
+
+    if (state.candidatePoolPromise) {
+      try { await state.candidatePoolPromise; } catch (err) {}
+      return state.candidatePool.byUnit[unit] || rawRoster;
+    }
+
+    if (!SCRIPT_URL || SCRIPT_URL.includes("PASTE_YOUR")) {
+      return state.candidatePool.byUnit[unit];
+    }
+
+    const period = getConfiguredExamPeriod();
+    state.candidatePoolPromise = (async () => {
+      try {
+        const url = new URL(SCRIPT_URL);
+        url.searchParams.set("action", "eligibleRoster");
+        url.searchParams.set("unit", unit);
+        url.searchParams.set("examMonth", period.month);
+        url.searchParams.set("examRound", period.round);
+        url.searchParams.set("_ts", String(Date.now()));
+        const resp = await fetch(url.toString());
+        const data = await resp.json();
+        if (data && data.ok && Array.isArray(data.rows)) {
+          const normalized = normalizeParticipantRegistry({ [unit]: data.rows })[unit] || [];
+          state.candidatePool.byUnit[unit] = normalized;
+          state.candidatePoolReady = true;
+          if ($("unit").value.trim() === unit) {
+            const selectedName = $("candidateNameSelect")?.value ? $("fullName").value.trim() : "";
+            renderCandidateNameOptions(selectedName);
+            if (selectedName) {
+              handleCandidateNameChange();
+            } else {
+              updateCandidateHiddenFields(unit, null);
+              renderResumeBox();
+            }
+          }
+          return normalized;
+        }
+      } catch (err) {
+        console.warn("Không lấy được danh sách thí sinh hợp lệ:", err);
+      } finally {
+        state.candidatePoolPromise = null;
+      }
+      return state.candidatePool.byUnit[unit] || rawRoster;
+    })();
+
+    return state.candidatePoolPromise;
+  }
+
+  function refreshCandidateNameOptions(selectedName = "") {
+    renderCandidateNameOptions(selectedName);
+    handleCandidateNameChange();
+    renderResumeBox();
+  }
+
+  function findParticipantByName(unit, fullName) {
+    const nameKey = String(fullName || "").trim().replace(/\s+/g, " ").toLocaleLowerCase("vi");
+    return getParticipantListByUnit(unit).find(item => item.name.toLocaleLowerCase("vi") === nameKey) || null;
+  }
+
+  function findEligibleParticipantByName(unit, fullName) {
+    const nameKey = String(fullName || "").trim().replace(/\s+/g, " ").toLocaleLowerCase("vi");
+    return getCandidateExamListByUnit(unit).find(item => item.name.toLocaleLowerCase("vi") === nameKey) || null;
+  }
+
+  function parseRosterEditorText(text) {
+    return String(text || "")
+      .split(/\r?\n/)
+      .map(line => line.trim())
+      .filter(Boolean)
+      .map(line => {
+        let name = line;
+        let position = DEFAULT_POSITION;
+        if (line.includes("|")) {
+          const parts = line.split("|");
+          name = parts[0].trim();
+          position = (parts.slice(1).join("|").trim() || DEFAULT_POSITION);
+        } else if (line.includes("\t")) {
+          const parts = line.split("\t");
+          name = parts[0].trim();
+          position = (parts.slice(1).join(" ").trim() || DEFAULT_POSITION);
+        }
+        return { name, position };
+      })
+      .filter(item => item.name);
+  }
+
+  function formatRosterEditorText(list) {
+    return (Array.isArray(list) ? list : []).map(item => {
+      const name = String(item?.name || "").trim();
+      const position = String(item?.position || "").trim();
+      if (!name) return "";
+      return position && position !== DEFAULT_POSITION ? name + " | " + position : name;
+    }).filter(Boolean).join("\n");
+  }
+
+  function populateAdminRosterUnits() {
+    const values = [...new Set([...getUnitOptions(), ...Object.keys(normalizeParticipantRegistry(state.examWindow.participantRegistry))])].sort((a, b) => a.localeCompare(b, "vi"));
+    ["adminRosterUnit", "adminRemoveUnit"].forEach(id => {
+      const select = $(id);
+      if (!select) return;
+      const current = select.value;
+      select.innerHTML = `<option value="">-- Chọn đơn vị --</option>` + values.map(v => `<option>${escapeHtml(v)}</option>`).join("");
+      if (values.includes(current)) {
+        select.value = current;
+      } else if (current && !values.includes(current)) {
+        select.value = "";
+      }
+    });
+  }
+
+  function renderAdminParticipantList() {
+    const registry = normalizeParticipantRegistry(state.examWindow.participantRegistry);
+    const unitForDelete = $("adminRemoveUnit")?.value?.trim() || "";
+    const fallbackUnit = $("adminRosterUnit")?.value?.trim() || "";
+    const previewUnit = unitForDelete || fallbackUnit;
+    const deleteList = $("adminParticipantList");
+    const previewBody = $("adminRosterPreviewBody");
+    const summary = $("rosterSummary");
+
+    if (deleteList) {
+      const list = unitForDelete ? (registry[unitForDelete] || []) : [];
+      if (list.length) {
+        deleteList.innerHTML = list.map((item, idx) => `<option value="${idx}">${escapeHtml(item.name)}${item.position ? ' • ' + escapeHtml(item.position) : ''}</option>`).join("");
+      } else {
+        deleteList.innerHTML = `<option value="">${unitForDelete ? 'Đơn vị này chưa có cán bộ trong danh sách' : 'Hãy chọn đơn vị để xem danh sách cán bộ'}</option>`;
+      }
+    }
+
+    if (previewBody) {
+      const previewList = previewUnit ? (registry[previewUnit] || []) : [];
+      if (!previewUnit) {
+        previewBody.innerHTML = `<tr><td colspan="4" class="muted">Chưa chọn đơn vị để xem danh sách.</td></tr>`;
+      } else if (!previewList.length) {
+        previewBody.innerHTML = `<tr><td colspan="4" class="muted">Đơn vị này chưa có thí sinh trong danh sách.</td></tr>`;
+      } else {
+        previewBody.innerHTML = previewList.map((item, idx) => `
+          <tr>
+            <td>${idx + 1}</td>
+            <td>${escapeHtml(previewUnit)}</td>
+            <td>${escapeHtml(item.name)}</td>
+            <td>${escapeHtml(item.position || DEFAULT_POSITION)}</td>
+          </tr>
+        `).join("");
+      }
+    }
+
+    if (summary) {
+      if (!previewUnit) {
+        summary.className = "status neutral";
+        summary.textContent = "Chưa chọn đơn vị để quản lý danh sách thí sinh.";
+      } else {
+        const count = (registry[previewUnit] || []).length;
+        summary.className = "status " + (count ? "success" : "warning");
+        summary.innerHTML = count
+          ? `Đơn vị <b>${escapeHtml(previewUnit)}</b> hiện có <b>${count}</b> thí sinh trong danh sách.`
+          : `Đơn vị <b>${escapeHtml(previewUnit)}</b> hiện chưa có thí sinh trong danh sách.`;
+      }
+    }
+  }
+
+  async function addParticipantForAdmin() {
+    const unit = $("adminRosterUnit")?.value?.trim() || "";
+    const name = $("adminParticipantName")?.value?.trim().replace(/\s+/g, " ") || "";
+    const position = $("adminParticipantPosition")?.value?.trim() || DEFAULT_POSITION;
+    if (!unit) {
+      alert("Vui lòng chọn đơn vị.");
+      return;
+    }
+    if (!name) {
+      alert("Vui lòng nhập tên cán bộ.");
+      $("adminParticipantName")?.focus();
+      return;
+    }
+
+    const registry = normalizeParticipantRegistry(state.examWindow.participantRegistry);
+    const list = Array.isArray(registry[unit]) ? [...registry[unit]] : [];
+    const key = name.toLocaleLowerCase("vi");
+    const existingIndex = list.findIndex(item => String(item.name || "").trim().toLocaleLowerCase("vi") === key);
+    let message = "Đã thêm cán bộ vào danh sách dự thi.";
+    if (existingIndex >= 0) {
+      list[existingIndex] = { name, position };
+      message = "Tên cán bộ đã tồn tại, hệ thống đã cập nhật lại chức vụ.";
+    } else {
+      list.push({ name, position });
+    }
+    registry[unit] = list;
+    state.examWindow.participantRegistry = normalizeParticipantRegistry(registry);
+    populateAdminRosterUnits();
+    $("adminRosterUnit").value = unit;
+    if ($("adminRemoveUnit")) $("adminRemoveUnit").value = unit;
+    $("adminParticipantName").value = "";
+    $("adminParticipantPosition").value = position || DEFAULT_POSITION;
+    renderAdminParticipantList();
+    refreshCandidateNameOptions($("fullName")?.value || "");
+    renderAttendanceReport();
+
+    await saveExamWindowConfig({
+      ...state.examWindow,
+      updatedAt: new Date().toISOString(),
+      examSettings: readAdminSettingsForm(),
+      participantRegistry: normalizeParticipantRegistry(state.examWindow.participantRegistry),
+      examPeriod: readAdminExamPeriodForm(),
+      examInfo: readAdminExamInfoForm()
+    });
+    alert(message);
+    $("adminParticipantName")?.focus();
+  }
+
+  async function deleteSelectedParticipantForAdmin() {
+    const unit = $("adminRemoveUnit")?.value?.trim() || "";
+    const selectedIndex = Number($("adminParticipantList")?.value);
+    if (!unit) {
+      alert("Vui lòng chọn đơn vị cần xóa cán bộ.");
+      return;
+    }
+    if (!Number.isInteger(selectedIndex) || selectedIndex < 0) {
+      alert("Vui lòng chọn cán bộ cần xóa.");
+      return;
+    }
+
+    const registry = normalizeParticipantRegistry(state.examWindow.participantRegistry);
+    const list = Array.isArray(registry[unit]) ? [...registry[unit]] : [];
+    const person = list[selectedIndex];
+    if (!person) {
+      alert("Không tìm thấy cán bộ cần xóa.");
+      return;
+    }
+    const ok = confirm(`Bạn chắc chắn muốn xóa ${person.name} khỏi danh sách đơn vị ${unit}?`);
+    if (!ok) return;
+
+    list.splice(selectedIndex, 1);
+    registry[unit] = list;
+    state.examWindow.participantRegistry = normalizeParticipantRegistry(registry);
+    populateAdminRosterUnits();
+    $("adminRemoveUnit").value = unit;
+    if ($("adminRosterUnit") && !$("adminRosterUnit").value) $("adminRosterUnit").value = unit;
+    renderAdminParticipantList();
+    refreshCandidateNameOptions($("fullName")?.value || "");
+    renderAttendanceReport();
+
+    await saveExamWindowConfig({
+      ...state.examWindow,
+      updatedAt: new Date().toISOString(),
+      examSettings: readAdminSettingsForm(),
+      participantRegistry: normalizeParticipantRegistry(state.examWindow.participantRegistry),
+      examPeriod: readAdminExamPeriodForm(),
+      examInfo: readAdminExamInfoForm()
+    });
+    alert("Đã xóa cán bộ khỏi danh sách dự thi.");
+  }
+
+  function renderRosterEditor() {
+    renderAdminParticipantList();
+  }
+
+  function getAllParticipantRows() {
+    const registry = normalizeParticipantRegistry(state.examWindow.participantRegistry);
+    const units = Object.keys(registry).sort((a, b) => a.localeCompare(b, "vi"));
+    const rows = [];
+    let stt = 0;
+    units.forEach(unit => {
+      const list = Array.isArray(registry[unit]) ? [...registry[unit]] : [];
+      list.sort((a, b) => String(a.name || "").localeCompare(String(b.name || ""), "vi"));
+      list.forEach(item => {
+        rows.push({
+          stt: ++stt,
+          unit,
+          name: String(item.name || "").trim(),
+          position: String(item.position || DEFAULT_POSITION).trim() || DEFAULT_POSITION
+        });
+      });
+    });
+    return rows;
+  }
+
+  function exportParticipantRosterExcel() {
+    const rows = getAllParticipantRows();
+    if (!rows.length) {
+      alert("Chưa có danh sách thí sinh để xuất.");
+      return;
+    }
+    const sheetRows = rows.map(row => ({
+      STT: row.stt,
+      "Đơn vị": row.unit,
+      "Họ và tên": row.name,
+      "Chức vụ": row.position
+    }));
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.json_to_sheet(sheetRows);
+    XLSX.utils.book_append_sheet(wb, ws, "Danh sach thi sinh");
+    XLSX.writeFile(wb, "danh_sach_thi_sinh_theo_don_vi.xlsx");
+  }
+
+  function printParticipantRoster() {
+    const rows = getAllParticipantRows();
+    if (!rows.length) {
+      alert("Chưa có danh sách thí sinh để in.");
+      return;
+    }
+    const units = [...new Set(rows.map(row => row.unit))];
+    const bodyHtml = `
+      <div class="summary">
+        <b>Tổng số đơn vị:</b> ${units.length}<br>
+        <b>Tổng số thí sinh:</b> ${rows.length}
+      </div>
+      <table class="table-center">
+        <thead>
+          <tr>
+            <th>STT</th>
+            <th>Đơn vị</th>
+            <th>Họ và tên</th>
+            <th>Chức vụ</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rows.map(row => `
+            <tr>
+              <td>${row.stt}</td>
+              <td>${escapeHtml(row.unit)}</td>
+              <td>${escapeHtml(row.name)}</td>
+              <td>${escapeHtml(row.position)}</td>
+            </tr>
+          `).join("")}
+          <tr class="report-total-row">
+            <td colspan="3">Tổng</td>
+            <td>${rows.length}</td>
+          </tr>
+        </tbody>
+      </table>
+    `;
+    printWindow("Danh sách thí sinh dự thi", bodyHtml);
+  }
+
+  function saveCurrentRosterEditorToState(showNotice = true) {
+    return true;
+  }
+
+  function clearRosterForCurrentUnit() {
+    return;
+  }
+
+  function updateCandidateHiddenFields(unit, participant) {
+    $("fullName").value = participant?.name || "";
+    $("position").value = participant?.position || "";
+    state.settings = getEffectiveExamSettingsForUnit(unit || "");
+    updateCandidateStructureSummary(unit || "");
+    const startBtn = $("btnStartExam");
+    const gateStatus = getExamWindowStatus();
+    if (participant && participant.name) {
+      $("candidateRosterStatus").className = "status success";
+      $("candidateRosterStatus").innerHTML = "Thí sinh đã chọn: <b>" + escapeHtml(participant.name) + "</b>" + (participant.position ? " • Chức vụ: <b>" + escapeHtml(participant.position) + "</b>" : "");
+      if (startBtn) startBtn.disabled = !gateStatus.allowLogin;
+    } else if (unit) {
+      const rawList = getParticipantListByUnit(unit);
+      const list = getCandidateExamListByUnit(unit);
+      if (list.length) {
+        $("candidateRosterStatus").className = "status info";
+        $("candidateRosterStatus").textContent = "Đơn vị này có " + list.length + " thí sinh đủ điều kiện dự thi. Hãy chọn tên để bắt đầu thi.";
+      } else if (rawList.length) {
+        $("candidateRosterStatus").className = "status warning";
+        $("candidateRosterStatus").textContent = "Đơn vị này hiện không còn thí sinh đủ điều kiện dự thi trong tháng này.";
+      } else {
+        $("candidateRosterStatus").className = "status warning";
+        $("candidateRosterStatus").textContent = "Đơn vị này chưa được Admin nhập danh sách thí sinh.";
+      }
+      if (startBtn) startBtn.disabled = true;
+    } else {
+      $("candidateRosterStatus").className = "status neutral";
+      $("candidateRosterStatus").textContent = "Hãy chọn đơn vị trước, sau đó chọn tên thí sinh tương ứng.";
+      if (startBtn) startBtn.disabled = !gateStatus.allowLogin;
+    }
+  }
+
+  function renderCandidateNameOptions(selectedName = "") {
+    const unit = $("unit").value.trim();
+    const select = $("candidateNameSelect");
+    const roster = getCandidateExamListByUnit(unit);
+    const rawRoster = getParticipantListByUnit(unit);
+    if (!unit) {
+      select.innerHTML = '<option value="">-- Chọn đơn vị trước --</option>';
+      select.disabled = true;
+      select.value = "";
+      select.selectedIndex = 0;
+      updateCandidateHiddenFields("", null);
+      return;
+    }
+    if (!roster.length) {
+      select.innerHTML = `<option value="">${rawRoster.length ? '-- Không còn thí sinh đủ điều kiện --' : '-- Chưa có danh sách thí sinh --'}</option>`;
+      select.disabled = true;
+      select.value = "";
+      select.selectedIndex = 0;
+      updateCandidateHiddenFields(unit, null);
+      return;
+    }
+    select.disabled = false;
+    select.innerHTML = '<option value="">-- Chọn thí sinh --</option>' + roster.map((item, idx) => `<option value="${idx}">${escapeHtml(item.name)}${item.position ? " • " + escapeHtml(item.position) : ""}</option>`).join("");
+    const normalizedSelected = String(selectedName || "").trim().replace(/\s+/g, " ").toLocaleLowerCase("vi");
+    if (normalizedSelected) {
+      const idx = roster.findIndex(item => item.name.toLocaleLowerCase("vi") === normalizedSelected);
+      if (idx >= 0) {
+        select.value = String(idx);
+        updateCandidateHiddenFields(unit, roster[idx]);
+        return;
+      }
+    }
+    select.value = "";
+    select.selectedIndex = 0;
+    updateCandidateHiddenFields(unit, null);
+  }
+
+  function applyCandidateEligibilityUi(result, unit, fullName, participant) {
+    const startBtn = $("btnStartExam");
+    const gateStatus = getExamWindowStatus();
+    if (!unit || !fullName || !participant) {
+      if (startBtn) startBtn.disabled = !gateStatus.allowLogin;
+      return;
+    }
+    if (startBtn) startBtn.disabled = !gateStatus.allowLogin;
+    $("candidateRosterStatus").className = "status success";
+    $("candidateRosterStatus").innerHTML = "Thí sinh đã chọn: <b>" + escapeHtml(fullName) + "</b>" + (participant.position ? " • Chức vụ: <b>" + escapeHtml(participant.position) + "</b>" : "");
+  }
+
+  async function refreshSelectedCandidateStatus() {
+    const unit = $("unit").value.trim();
+    const roster = getCandidateExamListByUnit(unit);
+    const idx = Number($("candidateNameSelect").value);
+    const participant = Number.isInteger(idx) && idx >= 0 ? roster[idx] : null;
+    const fullName = participant?.name?.trim() || $("fullName").value.trim();
+    if (!unit || !fullName || !participant) return;
+    const cacheKey = makeCandidateKey(unit, fullName) + "::" + getConfiguredExamPeriod().month;
+    const result = { ok: true, alreadySubmitted: false, source: "eligiblePool" };
+    state.candidateStatusCache.byKey[cacheKey] = result;
+    applyCandidateEligibilityUi(result, unit, fullName, participant);
+  }
+
+  function handleCandidateNameChange() {
+    const unit = $("unit").value.trim();
+    const roster = getCandidateExamListByUnit(unit);
+    const idx = Number($("candidateNameSelect").value);
+    const participant = Number.isInteger(idx) && idx >= 0 ? roster[idx] : null;
+    updateCandidateHiddenFields(unit, participant || null);
+    renderResumeBox();
+    prepareExamDraftSoon();
+    refreshSelectedCandidateStatus();
+  }
+
+  function getRowsForReportScope() {
+    const month = getSelectedReportMonth();
+    const round = getSelectedReportRound();
+    return state.adminRows.filter(row => {
+      if (month && normalizeMonthValue(row.examMonth || "", "") !== month) return false;
+      if (round && String(row.examRound || "").trim() !== round) return false;
+      return true;
+    });
+  }
+
+  function buildLatestRowsByCandidate(rows) {
+    const latestByCandidate = {};
+    rows.forEach(row => {
+      if (!row.unit || !row.fullName) return;
+      const key = row.unit.toLocaleLowerCase("vi") + "||" + String(row.fullName).trim().replace(/\s+/g, " ").toLocaleLowerCase("vi");
+      const currentTime = new Date(row.submittedAt || 0).getTime();
+      const prevTime = latestByCandidate[key] ? new Date(latestByCandidate[key].submittedAt || 0).getTime() : -Infinity;
+      if (!latestByCandidate[key] || currentTime >= prevTime) latestByCandidate[key] = row;
+    });
+    return latestByCandidate;
+  }
+
+  function renderReportMonthStatus() {
+    const box = $("reportMonthStatus");
+    if (!box) return;
+    const month = getSelectedReportMonth();
+    const round = getSelectedReportRound();
+    box.className = "status info";
+    box.textContent = "Báo cáo đang xem theo " + buildExamCycleLabel(month, round || getConfiguredExamPeriod().round) + (round ? " (lọc đúng đợt " + round + ")" : " (gộp tất cả đợt trong tháng)");
+  }
+
+  function buildAttendanceReportData() {
+    const registry = normalizeParticipantRegistry(state.examWindow.participantRegistry);
+    const reportMonth = getSelectedReportMonth();
+    const selectedRound = getSelectedReportRound();
+    const scopedUnit = $("filterUnit")?.value?.trim() || "";
+    const allMonthRows = state.adminRows.filter(row => normalizeMonthValue(row.examMonth || "", "") === reportMonth);
+    const scopedRows = getRowsForReportScope();
+    const latestByCandidateAllMonth = buildLatestRowsByCandidate(allMonthRows);
+    const priorRounds = selectedRound ? getPreviousRounds(selectedRound) : [];
+    const priorRoundSet = new Set(priorRounds);
+    const priorParticipants = new Set(
+      allMonthRows
+        .filter(row => priorRoundSet.has(String(row.examRound || "").trim()))
+        .map(row => makeCandidateKey(row.unit, row.fullName))
+    );
+    const units = scopedUnit
+      ? [scopedUnit]
+      : [...new Set([...Object.keys(registry), ...allMonthRows.map(row => row.unit).filter(Boolean)])].sort((a, b) => a.localeCompare(b, "vi"));
+
+    const createGradeCounter = () => ({ "Yếu": 0, "Trung bình": 0, "Khá": 0, "Xuất sắc": 0 });
+    const overallGrades = createGradeCounter();
+    let totalRegistered = 0;
+    let totalPresent = 0;
+    const unitRows = [];
+    const absentRows = [];
+    const extraParticipants = [];
+
+    units.forEach(unit => {
+      const roster = registry[unit] || [];
+      const dedupRoster = normalizeParticipantRegistry({ [unit]: roster })[unit] || [];
+      const eligibleRoster = selectedRound && selectedRound !== "Chính"
+        ? dedupRoster.filter(person => !priorParticipants.has(makeCandidateKey(unit, person.name)))
+        : dedupRoster;
+
+      const presentRows = (() => {
+        if (!selectedRound) {
+          return eligibleRoster.map(person => latestByCandidateAllMonth[makeCandidateKey(unit, person.name)]).filter(Boolean);
+        }
+        const eligibleSet = new Set(eligibleRoster.map(person => makeCandidateKey(unit, person.name)));
+        const latestScoped = buildLatestRowsByCandidate(scopedRows.filter(row => row.unit === unit && eligibleSet.has(makeCandidateKey(row.unit, row.fullName))));
+        return Object.values(latestScoped);
+      })();
+
+      const presentSet = new Set(presentRows.map(row => makeCandidateKey(row.unit, row.fullName)));
+      const absent = eligibleRoster.filter(person => !presentSet.has(makeCandidateKey(unit, person.name)));
+      const unitGrades = createGradeCounter();
+      presentRows.forEach(row => {
+        const label = ["Yếu", "Trung bình", "Khá", "Xuất sắc"].includes(row.passState) ? row.passState : getPassState(Number(row.score || 0));
+        unitGrades[label] = (unitGrades[label] || 0) + 1;
+        overallGrades[label] = (overallGrades[label] || 0) + 1;
+      });
+
+      totalRegistered += eligibleRoster.length;
+      totalPresent += presentRows.length;
+      unitRows.push({
+        unit,
+        total: eligibleRoster.length,
+        present: presentRows.length,
+        absent: absent.length,
+        grades: unitGrades,
+        tested: presentRows.length,
+        rate: eligibleRoster.length ? (presentRows.length / eligibleRoster.length) * 100 : 0
+      });
+      absent.forEach(person => absentRows.push({ unit, name: person.name, position: person.position || DEFAULT_POSITION }));
+    });
+
+    const rowsForExtras = selectedRound ? scopedRows : Object.values(latestByCandidateAllMonth);
+    rowsForExtras.forEach(row => {
+      const roster = registry[row.unit] || [];
+      const found = roster.some(person => person.name.toLocaleLowerCase("vi") === String(row.fullName || "").trim().replace(/\s+/g, " ").toLocaleLowerCase("vi"));
+      if (!found) {
+        extraParticipants.push({ unit: row.unit, name: row.fullName, position: row.position || "", submittedAt: row.submittedAt });
+      }
+    });
+
+    return {
+      reportMonth,
+      selectedRound,
+      totalRegistered,
+      totalPresent,
+      totalAbsent: Math.max(0, totalRegistered - totalPresent),
+      rate: totalRegistered ? (totalPresent / totalRegistered) * 100 : 0,
+      overallGrades,
+      unitRows,
+      absentRows,
+      extraParticipants
+    };
+  }
+
+  function renderAttendanceReport() {
+    const report = buildAttendanceReportData();
+    const unitBody = $("attendanceUnitBody");
+    const absentBody = $("attendanceAbsentBody");
+    $("attendanceTotalRegistered").textContent = String(report.totalRegistered);
+    $("attendanceTotalPresent").textContent = String(report.totalPresent);
+    $("attendanceTotalAbsent").textContent = String(report.totalAbsent);
+    $("attendanceRate").textContent = report.rate.toFixed(1) + "%";
+    $("attendanceGradeWeak").textContent = String(report.overallGrades["Yếu"] || 0);
+    $("attendanceGradeAverage").textContent = String(report.overallGrades["Trung bình"] || 0);
+    $("attendanceGradeGood").textContent = String(report.overallGrades["Khá"] || 0);
+    $("attendanceGradeExcellent").textContent = String(report.overallGrades["Xuất sắc"] || 0);
+
+    unitBody.innerHTML = report.unitRows.length
+      ? report.unitRows.map((item, idx) => `
+        <tr>
+          <td>${idx + 1}</td>
+          <td>${escapeHtml(item.unit)}</td>
+          <td>${item.total}</td>
+          <td>${item.present}</td>
+          <td>${item.absent}</td>
+          <td>${item.grades["Yếu"] || 0}</td>
+          <td>${item.grades["Trung bình"] || 0}</td>
+          <td>${item.grades["Khá"] || 0}</td>
+          <td>${item.grades["Xuất sắc"] || 0}</td>
+          <td>${item.rate.toFixed(1)}%</td>
+        </tr>
+      `).join("") + `
+        <tr class="report-total-row">
+          <td></td>
+          <td>Tổng</td>
+          <td>${report.totalRegistered}</td>
+          <td>${report.totalPresent}</td>
+          <td>${report.totalAbsent}</td>
+          <td>${report.overallGrades["Yếu"] || 0}</td>
+          <td>${report.overallGrades["Trung bình"] || 0}</td>
+          <td>${report.overallGrades["Khá"] || 0}</td>
+          <td>${report.overallGrades["Xuất sắc"] || 0}</td>
+          <td>${report.rate.toFixed(1)}%</td>
+        </tr>`
+      : '<tr><td colspan="10" class="muted">Chưa có dữ liệu danh sách thí sinh theo đơn vị.</td></tr>';
+
+    absentBody.innerHTML = report.absentRows.length
+      ? report.absentRows.map((item, idx) => `
+        <tr>
+          <td>${idx + 1}</td>
+          <td>${escapeHtml(item.unit)}</td>
+          <td>${escapeHtml(item.name)}</td>
+          <td>${escapeHtml(item.position || DEFAULT_POSITION)}</td>
+        </tr>
+      `).join("")
+      : '<tr><td colspan="4" class="muted">Không có thí sinh vắng thi trong phạm vi báo cáo hiện tại.</td></tr>';
+
+    const note = $("attendanceExtraNote");
+    renderReportMonthStatus();
+    if (!report.totalRegistered) {
+      note.className = "status warning";
+      note.textContent = report.selectedRound && report.selectedRound !== "Chính"
+        ? "Đợt " + report.selectedRound + " không còn thí sinh nào trong diện phải thi tiếp của tháng " + report.reportMonth + "."
+        : "Admin chưa nhập danh sách thí sinh theo đơn vị nên chưa thể thống kê tỷ lệ tham gia thi của tháng " + report.reportMonth + ".";
+    } else if (report.extraParticipants.length) {
+      note.className = "status info";
+      note.innerHTML = "Tháng <b>" + escapeHtml(report.reportMonth) + "</b> có <b>" + report.extraParticipants.length + "</b> bài thi của người chưa có trong danh sách đơn vị. Các trường hợp này không được tính vào mẫu số chuyên cần.";
+    } else {
+      note.className = "status success";
+      note.textContent = report.selectedRound && report.selectedRound !== "Chính"
+        ? "Báo cáo đợt " + report.selectedRound + " chỉ tính trên danh sách thí sinh chưa hoàn thành ở các đợt trước trong tháng " + report.reportMonth + "."
+        : "Báo cáo chuyên cần đang được tính theo danh sách thí sinh Admin đã nhập cho tháng " + report.reportMonth + ".";
+    }
+  }
+
+  function saveLocalExamWindow(config) {
+    try {
+      localStorage.setItem(EXAM_CONFIG_STORAGE_KEY, JSON.stringify(config));
+    } catch (err) {
+      console.warn("Không lưu được cấu hình cục bộ:", err);
+    }
+  }
+
+  function readLocalExamWindow() {
+    try {
+      const raw = localStorage.getItem(EXAM_CONFIG_STORAGE_KEY);
+      if (!raw) return null;
+      return normalizeExamWindow(JSON.parse(raw));
+    } catch (err) {
+      return null;
+    }
+  }
+
+  function showAdminSection(tabName = "structure") {
+    const safeTab = ["structure", "roster", "report"].includes(tabName) ? tabName : "structure";
+    document.querySelectorAll(".admin-tab-btn").forEach(btn => {
+      btn.classList.toggle("active", btn.dataset.adminTab === safeTab);
+    });
+    const map = {
+      structure: "adminStructureSection",
+      roster: "adminRosterSection",
+      report: "adminReportSection"
+    };
+    Object.entries(map).forEach(([key, id]) => {
+      const el = $(id);
+      if (el) el.classList.toggle("active", key === safeTab);
+    });
+  }
+
+  function applySettingsFromConfig() {
+    state.settings = getEffectiveExamSettingsForUnit($("unit")?.value?.trim() || "");
+    state.reportMonth = normalizeMonthValue(state.examWindow.examPeriod?.month || state.reportMonth || getCurrentMonthValue(), getCurrentMonthValue());
+    renderWelcomePanel();
+    fillAdminSettingsForm();
+    renderDistributionEditor("distributionGrid", "distributionSummary", getGlobalExamSettings(), "distribution-input", "settingQuestionCount");
+    populateAdminRosterUnits();
+    renderRosterEditor();
+    refreshCandidateNameOptions($("fullName")?.value || "");
+    prefetchEligibleRosterAll();
+    renderAttendanceReport();
+    syncHomeHeaderIfDefaultView();
+  }
+
+  function getQuestionCount(settings = state.settings) {
+    const safe = normalizeExamSettings(settings || state.settings || DEFAULT_SETTINGS);
+    return Math.min(safe.totalQuestions, Math.max(1, state.allQuestions.length || safe.totalQuestions));
+  }
+
+  function getPassState(score) {
+    const value = Number(score || 0);
+    if (value < 5) return "Yếu";
+    if (value < 7) return "Trung bình";
+    if (value < 9) return "Khá";
+    return "Xuất sắc";
+  }
+
+  function getResultClass(label) {
+    return label === "Yếu" ? "result-fail" : "result-pass";
+  }
+
+  function getExamWindowStatus() {
+    const config = normalizeExamWindow(state.examWindow);
+    if (!config.enabled || !config.start || !config.end) {
+      return {
+        allowLogin: false,
+        phase: "closed",
+        message: "Admin chưa mở lịch thi. Thí sinh chưa thể đăng nhập vào thi."
+      };
+    }
+    const now = new Date();
+    const start = new Date(config.start);
+    const end = new Date(config.end);
+
+    if (isNaN(start) || isNaN(end) || end <= start) {
+      return {
+        allowLogin: false,
+        phase: "invalid",
+        message: "Lịch mở thi chưa hợp lệ. Vui lòng kiểm tra lại cấu hình."
+      };
+    }
+    if (now < start) {
+      return {
+        allowLogin: false,
+        phase: "pending",
+        message: "Chưa đến thời gian mở thi. Thời gian mở: " + formatDateTime(config.start) + " đến " + formatDateTime(config.end) + "."
+      };
+    }
+    if (now > end) {
+      return {
+        allowLogin: false,
+        phase: "ended",
+        message: "Đã hết thời gian mở thi. Khung giờ thi: " + formatDateTime(config.start) + " đến " + formatDateTime(config.end) + "."
+      };
+    }
+    return {
+      allowLogin: true,
+      phase: "open",
+      message: "Đang trong thời gian mở thi: " + formatDateTime(config.start) + " đến " + formatDateTime(config.end) + "."
+    };
+  }
+
+  function syncExamTopupVisibility(activeSectionId) {
+    const topup = $("examStatusTopup");
+    const sectionId = activeSectionId || (["welcomePanel","examPanel","resultPanel","adminPanel"].find(id => !$(id).classList.contains("hidden")) || "welcomePanel");
+    topup.classList.toggle("hidden", sectionId !== "welcomePanel");
+  }
+
+  function updateExamStatusTopup() {
+    const status = getExamWindowStatus();
+    const topup = $("examStatusTopup");
+    topup.classList.remove("open","closed");
+    topup.classList.add(status.allowLogin ? "open" : "closed");
+    $("examStatusTopupTitle").textContent = status.allowLogin ? "ĐANG MỞ THI" : "CHƯA MỞ THI";
+    $("examStatusTopupDesc").textContent = status.message;
+  }
+
+  function renderExamGateStatus() {
+    const gateStatus = getExamWindowStatus();
+    updateExamStatusTopup();
+    const gateBox = $("candidateGateStatus");
+    if (gateBox) {
+      gateBox.textContent = "";
+      gateBox.className = "hidden";
+    }
+    if (!gateStatus.allowLogin) {
+      $("btnStartExam").disabled = true;
+    } else if ($("fullName").value.trim()) {
+      refreshSelectedCandidateStatus();
+    } else {
+      $("btnStartExam").disabled = false;
+    }
+
+    const cfg = normalizeExamWindow(state.examWindow);
+    const gateSummary = $("gateSummary");
+    if (gateSummary) {
+      const period = normalizeExamPeriod(cfg.examPeriod || {});
+      if (!cfg.enabled || !cfg.start || !cfg.end) {
+        gateSummary.innerHTML = "<b>Trạng thái hiện tại:</b> Chưa mở thi.<br><b>Kỳ thi:</b> " + escapeHtml(buildExamCycleLabel(period.month, period.round));
+      } else {
+        gateSummary.innerHTML =
+          "<b>Trạng thái hiện tại:</b> " + (gateStatus.allowLogin ? "Đang mở thi" : "Chưa cho đăng nhập") + "<br>" +
+          "<b>Kỳ thi:</b> " + escapeHtml(buildExamCycleLabel(period.month, period.round)) + "<br>" +
+          "<b>Từ:</b> " + escapeHtml(formatDateTime(cfg.start)) + "<br>" +
+          "<b>Đến:</b> " + escapeHtml(formatDateTime(cfg.end)) +
+          (cfg.updatedAt ? "<br><b>Cập nhật lúc:</b> " + escapeHtml(formatDateTime(cfg.updatedAt)) : "");
+      }
+    }
+    renderWelcomePanel();
+  }
+
+  function fillAdminSettingsForm() {
+    const globalSettings = getGlobalExamSettings();
+    $("settingQuestionCount").value = globalSettings.totalQuestions;
+    $("settingTimeMinutes").value = globalSettings.timeMinutes;
+    $("settingPassScore").value = globalSettings.passScore;
+    $("settingExamMonth").value = normalizeMonthValue(state.examWindow.examPeriod?.month || state.reportMonth || getCurrentMonthValue(), getCurrentMonthValue());
+    $("settingExamRound").value = normalizeExamRound(state.examWindow.examPeriod?.round || EXAM_ROUND_OPTIONS[0]);
+    $("settingWelcomeContent").value = getExamInfo().content;
+    $("reportMonth").value = normalizeMonthValue(state.reportMonth || state.examWindow.examPeriod?.month || getCurrentMonthValue(), getCurrentMonthValue());
+    $("examOpenStart").value = state.examWindow.start ? toLocalDateTimeValue(state.examWindow.start) : "";
+    $("examOpenEnd").value = state.examWindow.end ? toLocalDateTimeValue(state.examWindow.end) : "";
+    const periodBox = $("examPeriodSummary");
+    if (periodBox) {
+      periodBox.className = "status info";
+      periodBox.textContent = "Kỳ thi hiện hành: " + buildExamCycleLabel($("settingExamMonth").value, $("settingExamRound").value) + ". Thí sinh đã có kết quả trong tháng này sẽ không được đăng nhập thi lại.";
+    }
+    populateUnitStructureUnits($("settingUnitConfigTarget")?.value || "");
+  }
+
+  function readAdminExamInfoForm() {
+    return normalizeExamInfo({
+      content: $("settingWelcomeContent")?.value || ""
+    });
+  }
+
+  function readAdminSettingsForm() {
+    return normalizeExamSettings({
+      totalQuestions: $("settingQuestionCount").value,
+      timeMinutes: $("settingTimeMinutes").value,
+      passScore: $("settingPassScore").value,
+      groupDistribution: readDistributionInputs()
+    });
+  }
+
+  function readAdminExamPeriodForm() {
+    return normalizeExamPeriod({
+      month: $("settingExamMonth").value,
+      round: $("settingExamRound").value
+    });
+  }
+
+  async function fetchExamWindowConfig(silent = false) {
+    const localConfig = readLocalExamWindow();
+    if (localConfig) {
+      state.examWindow = localConfig;
+      applySettingsFromConfig();
+      renderExamGateStatus();
+    }
+
+    if (!SCRIPT_URL || SCRIPT_URL.includes("PASTE_YOUR")) {
+      if (!silent) {
+        $("adminGateSaveStatus").className = "status warning";
+        $("adminGateSaveStatus").textContent = "Chưa cấu hình SCRIPT_URL nên hiện chỉ đọc được cấu hình cục bộ trên máy này.";
+      }
+      return state.examWindow;
+    }
+
+    try {
+      const url = SCRIPT_URL + (SCRIPT_URL.includes("?") ? "&" : "?") + "action=getConfig&_ts=" + Date.now();
+      const resp = await fetch(url);
+      const data = await resp.json();
+      if (data && data.ok && data.config) {
+        state.examWindow = normalizeExamWindow(data.config);
+        saveLocalExamWindow(state.examWindow);
+        if (data.candidatePool && typeof data.candidatePool === "object") {
+          const period = normalizeExamPeriod(data.candidatePool.period || state.examWindow.examPeriod || {});
+          const rowsByUnit = normalizeParticipantRegistry(data.candidatePool.rowsByUnit || {});
+          state.candidatePool = { month: period.month, round: period.round, byUnit: rowsByUnit };
+          state.candidatePoolPrefetchKey = period.month + "::" + period.round;
+          state.candidatePoolReady = true;
+        }
+        applySettingsFromConfig();
+        renderExamGateStatus();
+        if (!silent) {
+          $("adminGateSaveStatus").className = "status success";
+          $("adminGateSaveStatus").textContent = "Đã đồng bộ cấu hình kỳ thi từ hệ thống.";
+        }
+      }
+      return state.examWindow;
+    } catch (err) {
+      if (!silent) {
+        $("adminGateSaveStatus").className = "status warning";
+        $("adminGateSaveStatus").textContent = "Không tải được cấu hình từ hệ thống, đang dùng dữ liệu cục bộ gần nhất.";
+      }
+      return state.examWindow;
+    }
+  }
+
+  async function saveExamWindowConfig(config) {
+    const mergedConfig = {
+      ...state.examWindow,
+      ...(config || {}),
+      participantRegistry: config?.participantRegistry ?? state.examWindow.participantRegistry,
+      unitExamSettings: config?.unitExamSettings ?? state.examWindow.unitExamSettings
+    };
+    state.examWindow = normalizeExamWindow(mergedConfig);
+    resetCandidatePoolCache(true);
+    saveLocalExamWindow(state.examWindow);
+    applySettingsFromConfig();
+    invalidatePreparedExamDraft();
+    prepareExamDraftSoon();
+    renderExamGateStatus();
+
+    const statusBox = $("adminGateSaveStatus");
+    statusBox.className = "status info";
+    statusBox.textContent = "Đang lưu cấu hình kỳ thi...";
+
+    if (!SCRIPT_URL || SCRIPT_URL.includes("PASTE_YOUR")) {
+      statusBox.className = "status warning";
+      statusBox.textContent = "Đã lưu cục bộ trên máy này. Muốn áp dụng cho mọi thí sinh, Apps Script cần hỗ trợ lưu/đọc action getConfig/saveConfig.";
+      showToast("Đã lưu cấu hình trên máy này, nhưng chưa đồng bộ lên hệ thống.", "warning");
+      return { ok: false, localOnly: true };
+    }
+
+    try {
+      const resp = await fetch(SCRIPT_URL, {
+        method: "POST",
+        body: JSON.stringify({ action: "saveConfig", config: state.examWindow }),
+        headers: { "Content-Type": "text/plain;charset=utf-8" }
+      });
+      const data = await resp.json().catch(() => ({ ok: true }));
+      if (data && data.ok) {
+        statusBox.className = "status success";
+        statusBox.textContent = "Đã lưu toàn bộ cấu hình kỳ thi thành công.";
+        showToast("Đã lưu toàn bộ cấu hình kỳ thi thành công.", "success");
+      } else {
+        statusBox.className = "status warning";
+        statusBox.textContent = "Đã lưu cục bộ nhưng chưa lưu được lên hệ thống. Kiểm tra Apps Script action saveConfig/getConfig.";
+        showToast("Đã lưu cục bộ, nhưng chưa đồng bộ được lên hệ thống.", "warning");
+      }
+      return data;
+    } catch (err) {
+      statusBox.className = "status warning";
+      statusBox.textContent = "Đã lưu cục bộ nhưng chưa lưu được lên hệ thống: " + (err.message || "Lỗi chưa xác định") + ".";
+      showToast("Không đồng bộ được cấu hình lên hệ thống: " + (err.message || "Lỗi chưa xác định"), "error");
+      return { ok: false, message: err.message || "Không lưu được cấu hình" };
+    }
+  }
+
+  function getAllConfigurableUnits() {
+    return [...new Set([
+      ...getUnitOptions(),
+      ...Object.keys(normalizeParticipantRegistry(state.examWindow.participantRegistry)),
+      ...Object.keys(normalizeUnitExamSettingsMap(state.examWindow.unitExamSettings || {}, getGlobalExamSettings()))
+    ].filter(Boolean))].sort((a, b) => a.localeCompare(b, "vi"));
+  }
+
+  function updateCandidateStructureSummary(unit = $("unit")?.value?.trim() || "") {
+    const box = $("candidateStructureSummary");
+    if (!box) return;
+    if (!unit) {
+      box.className = "status neutral";
+      box.textContent = "Chọn đơn vị để hệ thống áp dụng đúng cấu trúc đề thi tương ứng.";
+      return;
+    }
+    const effective = getEffectiveExamSettingsForUnit(unit);
+    const override = getUnitExamSettings(unit);
+    const dist = override && override.groupDistribution && Object.keys(override.groupDistribution).some(cat => Number(override.groupDistribution[cat] || 0) > 0)
+      ? Object.entries(override.groupDistribution).filter(([, pct]) => Number(pct) > 0).map(([cat, pct]) => `${cat}: ${pct}%`).join(" • ")
+      : "ngẫu nhiên toàn ngân hàng";
+    box.className = override ? "status info" : "status neutral";
+    box.textContent = `Cấu trúc đề ${override ? 'riêng' : 'chung'} của ${unit}: ${effective.totalQuestions} câu • ${effective.timeMinutes} phút • phân bố nội dung ${dist}.`;
+  }
+
+  function populateUnitStructureUnits(selectedValue = "") {
+    const select = $("settingUnitConfigTarget");
+    if (!select) return;
+    const current = selectedValue || select.value || "";
+    const units = getAllConfigurableUnits();
+    select.innerHTML = '<option value="">-- Chọn đơn vị --</option>' + units.map(unit => `<option value="${escapeHtml(unit)}">${escapeHtml(unit)}</option>`).join("");
+    select.value = units.includes(current) ? current : "";
+    renderUnitStructureEditor();
+  }
+
+  function fillUnitStructureForm(unit, useGlobalValues = false) {
+    const base = getGlobalExamSettings();
+    const effective = useGlobalValues ? base : getEffectiveExamSettingsForUnit(unit);
+    renderDistributionEditor("unitDistributionGrid", "unitDistributionSummary", effective, "unit-distribution-input", null);
+    const summary = $("unitStructureHint");
+    if (!summary) return;
+    if (!unit) {
+      summary.className = "status neutral";
+      summary.textContent = "Chọn một đơn vị để thiết lập phân bố nội dung đề riêng. Nếu không thiết lập riêng, đơn vị sẽ dùng cấu hình chung ở trên.";
+      return;
+    }
+    const override = getUnitExamSettings(unit);
+    if (override && !useGlobalValues) {
+      summary.className = "status info";
+      summary.textContent = `Đơn vị ${unit} đang dùng phân bố nội dung đề riêng. Số câu và thời gian vẫn dùng cấu hình chung.`;
+    } else {
+      summary.className = "status neutral";
+      summary.textContent = `Đơn vị ${unit} hiện đang dùng cấu hình chung. Có thể chỉnh phân bố nội dung phía dưới rồi bấm Lưu cấu trúc riêng cho đơn vị.`;
+    }
+  }
+
+  function renderUnitStructureEditor() {
+    const unit = $("settingUnitConfigTarget")?.value?.trim() || "";
+    fillUnitStructureForm(unit, false);
+  }
+
+  function readUnitStructureForm() {
+    const base = getGlobalExamSettings();
+    return normalizeExamSettings({
+      totalQuestions: base.totalQuestions,
+      timeMinutes: base.timeMinutes,
+      passScore: base.passScore,
+      groupDistribution: readDistributionInputs("unit-distribution-input")
+    });
+  }
+
+  async function saveUnitStructureConfig() {
+    const unit = $("settingUnitConfigTarget")?.value?.trim() || "";
+    if (!unit) {
+      alert("Vui lòng chọn đơn vị cần cấu hình riêng.");
+      return;
+    }
+    const settings = readUnitStructureForm();
+    const distTotal = Number(Object.values(settings.groupDistribution).reduce((sum, v) => sum + Number(v || 0), 0).toFixed(2));
+    if (distTotal > 0 && distTotal !== 100) {
+      alert("Tổng tỷ lệ chuyên đề của cấu trúc riêng theo đơn vị phải bằng 100%.");
+      return;
+    }
+    const planCheck = computeDistributionPlan(settings.groupDistribution, settings.totalQuestions);
+    if (distTotal === 100 && !planCheck.valid && planCheck.reason === "insufficient") {
+      alert("Ngân hàng câu hỏi hiện không đủ để bốc đề theo cơ cấu của đơn vị này: " + planCheck.shortages.join("; "));
+      return;
+    }
+    const nextMap = normalizeUnitExamSettingsMap(state.examWindow.unitExamSettings || {}, getGlobalExamSettings());
+    nextMap[unit] = {
+      groupDistribution: { ...(settings.groupDistribution || {}) }
+    };
+    await saveExamWindowConfig({
+      ...state.examWindow,
+      updatedAt: new Date().toISOString(),
+      unitExamSettings: nextMap
+    });
+    populateUnitStructureUnits(unit);
+    updateCandidateStructureSummary();
+    showToast(`Đã lưu phân bố nội dung đề riêng cho ${unit}.`, "success");
+  }
+
+  async function deleteUnitStructureConfig() {
+    const unit = $("settingUnitConfigTarget")?.value?.trim() || "";
+    if (!unit) {
+      alert("Vui lòng chọn đơn vị cần xóa cấu trúc riêng.");
+      return;
+    }
+    const nextMap = normalizeUnitExamSettingsMap(state.examWindow.unitExamSettings || {}, getGlobalExamSettings());
+    if (!nextMap[unit]) {
+      alert("Đơn vị này hiện chưa có cấu trúc đề riêng.");
+      return;
+    }
+    const ok = confirm(`Xóa cấu trúc đề riêng của ${unit} để quay về cấu hình chung?`);
+    if (!ok) return;
+    delete nextMap[unit];
+    await saveExamWindowConfig({
+      ...state.examWindow,
+      updatedAt: new Date().toISOString(),
+      unitExamSettings: nextMap
+    });
+    populateUnitStructureUnits(unit);
+    updateCandidateStructureSummary();
+    showToast(`Đã xóa cấu trúc đề riêng của ${unit}.`, "success");
+  }
+
+  function renderWelcomePanel() {
+    const examInfo = getExamInfo();
+    $("welcomePanel").innerHTML = `
+      <div style="border:1px solid #e3e8f2;border-radius:18px;background:linear-gradient(180deg,#fff,#fff8f8);padding:18px 28px 26px;box-shadow:0 12px 28px rgba(16,24,40,.06);height:100%;">
+        <div style="margin-top:0;border:1px solid #ead3d3;border-radius:16px;background:#fff;padding:18px 20px;">
+          <div style="font-size:22px;font-weight:700;color:var(--primary-dark);margin-bottom:10px;">1. Đối tượng</div>
+          <div style="font-size:19px;line-height:1.7;">
+            - Chỉ huy Đội 2; chỉ huy phụ trách công tác kiểm tra Đội 4, các Đội Chữa cháy và cứu nạn, cứu hộ khu vực;<br>
+            - Cán bộ, chiến sĩ đang trực tiếp, dự kiến phân công thực hiện nhiệm vụ kiểm tra về PCCC thuộc Phòng Cảnh sát PCCC và CNCH.
+          </div>
+        </div>
+        <div style="margin-top:18px;border:1px solid #ead3d3;border-radius:16px;background:#fff;padding:18px 20px;">
+          <div style="font-size:22px;font-weight:700;color:var(--primary-dark);margin-bottom:10px;">2. Nội dung kiểm tra</div>
+          <div style="font-size:19px;line-height:1.7;">${formatMultilineHtml(examInfo.content)}</div>
+        </div>
+      </div>
+    `;
+  }
+
+
+  function normalizeQuestionRow(row, index) {
+    const topicRaw = row["Nội dung"] || row["Noi dung"] || row.Topic || row.topic || row.Category || row.category || row.Group || row.group || row["Nhóm"] || row["Chuyên đề"] || row["Lĩnh vực"] || "Chung";
+    const q = {
+      id: String(row.STT || row.Id || row.ID || row.id || index + 1).trim(),
+      topic: String(topicRaw || "Chung").trim() || "Chung",
+      category: String(topicRaw || "Chung").trim() || "Chung",
+      question: String(row["Câu hỏi"] || row.Question || row.question || "").trim(),
+      A: String(row.A || row.a || "").trim(),
+      B: String(row.B || row.b || "").trim(),
+      C: String(row.C || row.c || "").trim(),
+      D: String(row.D || row.d || "").trim(),
+      correct: String(row["Đáp án đúng"] || row["Dap an dung"] || row.Correct || row.correct || "").trim().toUpperCase(),
+      basis: String(row["Căn cứ"] || row["Can cu"] || row.Basis || row.basis || row.LegalBasis || row.legalBasis || "").trim(),
+      explanation: String(row.Explanation || row.explanation || row["Giải thích"] || row["Giai thich"] || row["Căn cứ"] || row["Can cu"] || "").trim()
+    };
+    q.legalBasis = q.basis || q.explanation || "";
+    return q;
+  }
+
+  function setQuestions(questions, sourceLabel = "") {
+    state.allQuestions = questions;
+    state.categories = [...new Set(questions.map(q => q.category || "Chung"))].sort((a, b) => a.localeCompare(b, "vi"));
+    renderDistributionEditor("distributionGrid", "distributionSummary", getGlobalExamSettings(), "distribution-input", "settingQuestionCount");
+    renderUnitStructureEditor();
+    renderWelcomePanel();
+    if (questions.length) {
+      setStatus("", "");
+    }
+  }
+
+  async function loadQuestionsFromExcel() {
+    let usedCache = false;
+    try {
+      const cachedRaw = sessionStorage.getItem(QUESTION_CACHE_KEY);
+      if (cachedRaw) {
+        const cached = JSON.parse(cachedRaw);
+        if (Array.isArray(cached.questions) && cached.questions.length) {
+          setQuestions(cached.questions, "nạp nhanh từ bộ nhớ tạm");
+          usedCache = true;
+          prepareExamDraftSoon();
+        }
+      }
+    } catch (err) {
+      console.warn("Không đọc được cache câu hỏi:", err);
+    }
+
+    try {
+      const resp = await fetch(EXCEL_FILE + "?v=" + Date.now());
+      if (!resp.ok) throw new Error("Không tải được file " + EXCEL_FILE);
+      const arrayBuffer = await resp.arrayBuffer();
+      const workbook = XLSX.read(arrayBuffer, { type: "array" });
+      const preferredSheetName = workbook.SheetNames.find(name => String(name).trim().toLowerCase() === "nganhangcauhoi".toLowerCase()) ||
+        workbook.SheetNames.find(name => String(name).trim().toLowerCase() === "ngan_hang_cau_hoi") ||
+        workbook.SheetNames[0];
+      const sheet = workbook.Sheets[preferredSheetName];
+      const rows = XLSX.utils.sheet_to_json(sheet, { defval: "" });
+
+      const questions = rows.map((row, index) => normalizeQuestionRow(row, index)).filter(q =>
+        q.question && q.A && q.B && q.C && q.D && ["A","B","C","D"].includes(q.correct)
+      );
+
+      if (!questions.length) {
+        throw new Error("Không tìm thấy câu hỏi hợp lệ trong file Excel.");
+      }
+
+      sessionStorage.setItem(QUESTION_CACHE_KEY, JSON.stringify({ questions, savedAt: new Date().toISOString() }));
+      setQuestions(questions, "đồng bộ mới nhất");
+      prepareExamDraftSoon();
+    } catch (err) {
+      if (!state.allQuestions.length) {
+        setStatus("error",
+          "Không thể tải file <b>" + EXCEL_FILE + "</b>.<br>" +
+          "Kiểm tra lại:<br>" +
+          "1. File Excel có đúng tên <b>questions.xlsx</b> hay không.<br>" +
+          "2. File đặt cùng thư mục với HTML hay không.<br>" +
+          "3. Bạn đang mở web qua hosting/web server, không mở bằng đường dẫn file cục bộ.<br><br>" +
+          "<b>Chi tiết:</b> " + escapeHtml(err.message)
+        );
+      } else {
+        setStatus("warning", "Đang dùng ngân hàng câu hỏi tạm từ bộ nhớ do chưa đọc được file Excel mới. Chi tiết: " + escapeHtml(err.message));
+      }
+    }
+  }
+
+  function getCategoryQuestionCount(category) {
+    return state.allQuestions.filter(q => (q.category || "Chung") === category).length;
+  }
+
+  function computeDistributionPlan(distributionPercent, totalNeeded) {
+    const entries = Object.entries(distributionPercent || {}).map(([cat, pct]) => ({
+      category: cat,
+      percent: Math.max(0, Number(pct) || 0)
+    })).filter(item => item.percent > 0);
+
+    const totalPercent = Number(entries.reduce((sum, item) => sum + item.percent, 0).toFixed(2));
+    if (!entries.length || totalPercent !== 100) {
+      return { valid: false, reason: "percent_sum", totalPercent, planned: {} };
+    }
+
+    const raw = entries.map(item => ({
+      ...item,
+      exact: (item.percent / 100) * totalNeeded
+    }));
+    const planned = {};
+    let assigned = 0;
+    raw.forEach(item => {
+      const floorValue = Math.floor(item.exact);
+      planned[item.category] = floorValue;
+      assigned += floorValue;
+    });
+
+    let remaining = totalNeeded - assigned;
+    raw.sort((a, b) => {
+      const diff = (b.exact - Math.floor(b.exact)) - (a.exact - Math.floor(a.exact));
+      if (Math.abs(diff) > 1e-9) return diff;
+      return a.category.localeCompare(b.category, "vi");
+    });
+    for (let i = 0; i < raw.length && remaining > 0; i++) {
+      planned[raw[i].category] += 1;
+      remaining -= 1;
+      if (i === raw.length - 1 && remaining > 0) i = -1;
+    }
+
+    const shortages = [];
+    Object.entries(planned).forEach(([cat, count]) => {
+      const available = getCategoryQuestionCount(cat);
+      if (available < count) shortages.push(cat + " thiếu " + (count - available) + " câu");
+    });
+    if (shortages.length) {
+      return { valid: false, reason: "insufficient", totalPercent, planned, shortages };
+    }
+    return { valid: true, reason: "ok", totalPercent, planned };
+  }
+
+  function renderDistributionEditor(gridId = "distributionGrid", summaryId = "distributionSummary", settings = state.settings, inputClass = "distribution-input", countInputId = "settingQuestionCount") {
+    const box = $(gridId);
+    if (!box) return;
+    box.innerHTML = "";
+    const safeSettings = normalizeExamSettings(settings || DEFAULT_SETTINGS);
+    const categories = state.categories.length ? state.categories : ["Chung"];
+    categories.forEach(cat => {
+      const value = Number(safeSettings.groupDistribution?.[cat] || 0);
+      const available = getCategoryQuestionCount(cat);
+      const wrap = document.createElement("div");
+      wrap.className = "distribution-item";
+      wrap.innerHTML = `
+        <label>${escapeHtml(cat)}</label>
+        <input type="number" min="0" max="100" step="1" class="${escapeHtml(inputClass)}" data-category="${escapeHtml(cat)}" value="${value}" />
+        <div class="muted tiny" style="margin-top:6px">Tỷ lệ % câu hỏi cho chuyên đề này • Có sẵn ${available} câu.</div>
+      `;
+      box.appendChild(wrap);
+    });
+    updateDistributionSummary(summaryId, inputClass, countInputId, safeSettings.totalQuestions);
+  }
+
+  function readDistributionInputs(inputClass = "distribution-input") {
+    const values = {};
+    document.querySelectorAll("." + inputClass).forEach(input => {
+      const cat = input.getAttribute("data-category") || "";
+      const val = Math.max(0, Math.min(100, Math.round(Number(input.value) || 0)));
+      if (cat) values[cat] = val;
+    });
+    return values;
+  }
+
+  function updateDistributionSummary(summaryId = "distributionSummary", inputClass = "distribution-input", countInputId = "settingQuestionCount", fallbackQuestionCount = null) {
+    const summaryBox = $(summaryId);
+    if (!summaryBox) return;
+    const distribution = readDistributionInputs(inputClass);
+    const totalPercent = Number(Object.values(distribution).reduce((sum, v) => sum + Number(v || 0), 0).toFixed(2));
+    const countInput = countInputId ? $(countInputId) : null;
+    const questionCount = Number(countInput?.value || fallbackQuestionCount || state.settings.totalQuestions || DEFAULT_SETTINGS.totalQuestions);
+    const active = Object.entries(distribution).filter(([, v]) => Number(v) > 0);
+    if (!active.length) {
+      summaryBox.className = "status neutral";
+      summaryBox.textContent = "Chưa cấu hình phân bố % chuyên đề. Hệ thống sẽ bốc ngẫu nhiên toàn bộ ngân hàng.";
+      return;
+    }
+    const plan = computeDistributionPlan(distribution, questionCount);
+    if (plan.valid) {
+      const detail = Object.entries(plan.planned).map(([cat, count]) => cat + ": " + count + " câu").join(" • ");
+      summaryBox.className = "status success";
+      summaryBox.textContent = "Tổng tỷ lệ: " + totalPercent + "%. Dự kiến sinh đề: " + detail + ".";
+      return;
+    }
+    summaryBox.className = "status warning";
+    if (plan.reason === "insufficient") {
+      summaryBox.textContent = "Tổng tỷ lệ: " + totalPercent + "%, nhưng ngân hàng hiện không đủ câu theo cơ cấu này: " + plan.shortages.join(" • ") + ".";
+    } else {
+      summaryBox.textContent = "Tổng tỷ lệ hiện tại: " + totalPercent + "%. Muốn bốc đề theo chuyên đề, tổng tỷ lệ phải đúng 100%.";
+    }
+  }
+
+  function getPreparedExamSignature() {
+
+    return JSON.stringify({
+      totalQuestions: getQuestionCount(),
+      allQuestionsLength: state.allQuestions.length,
+      groupDistribution: state.settings.groupDistribution || {}
+    });
+  }
+
+  function invalidatePreparedExamDraft() {
+    state.preparedExamDraft = null;
+  }
+
+  function prepareExamDraftSoon() {
+    if (!state.allQuestions.length) return;
+    const signature = getPreparedExamSignature();
+    if (state.preparedExamDraft && state.preparedExamDraft.signature === signature && Array.isArray(state.preparedExamDraft.questions) && state.preparedExamDraft.questions.length === getQuestionCount()) {
+      return;
+    }
+    const runner = () => {
+      try {
+        state.preparedExamDraft = {
+          signature,
+          questions: buildQuestionSet()
+        };
+      } catch (err) {
+        console.warn("Không chuẩn bị sẵn đề thi được:", err);
+      }
+    };
+    if (typeof requestIdleCallback === "function") {
+      requestIdleCallback(runner, { timeout: 300 });
+    } else {
+      setTimeout(runner, 0);
+    }
+  }
+
+  function consumePreparedExamDraft() {
+    const signature = getPreparedExamSignature();
+    if (state.preparedExamDraft && state.preparedExamDraft.signature === signature && Array.isArray(state.preparedExamDraft.questions) && state.preparedExamDraft.questions.length === getQuestionCount()) {
+      const draft = state.preparedExamDraft.questions;
+      state.preparedExamDraft = null;
+      prepareExamDraftSoon();
+      return draft;
+    }
+    return buildQuestionSet();
+  }
+
+  function buildQuestionSet() {
+    const totalNeeded = getQuestionCount();
+    const buckets = {};
+    state.allQuestions.forEach(q => {
+      const cat = q.category || "Chung";
+      if (!buckets[cat]) buckets[cat] = [];
+      buckets[cat].push(q);
+    });
+
+    const plan = computeDistributionPlan(state.settings.groupDistribution || {}, totalNeeded);
+    let chosen = [];
+
+    if (plan.valid) {
+      Object.entries(plan.planned).forEach(([cat, count]) => {
+        const pool = shuffle(buckets[cat] || []);
+        chosen = chosen.concat(pool.slice(0, count));
+      });
+    } else {
+      chosen = shuffle(state.allQuestions).slice(0, totalNeeded);
+    }
+
+    return shuffle(chosen).map((q, index) => {
+      const optionObjects = shuffle([
+        { original: "A", text: q.A },
+        { original: "B", text: q.B },
+        { original: "C", text: q.C },
+        { original: "D", text: q.D }
+      ]);
+      const displayLetters = ["A","B","C","D"];
+      const mappedOptions = optionObjects.map((item, i) => ({
+        label: displayLetters[i],
+        text: item.text,
+        isCorrect: item.original === q.correct
+      }));
+      const correctDisplay = mappedOptions.find(o => o.isCorrect)?.label || "A";
+      return {
+        examIndex: index + 1,
+        id: q.id,
+        question: q.question,
+        options: mappedOptions,
+        correct: correctDisplay,
+        explanation: q.explanation || "",
+        basis: q.legalBasis || q.explanation || "",
+        category: q.category || "Chung"
+      };
+    });
+  }
+
+  function getAnsweredCount() {
+    return state.examQuestions.reduce((sum, q) => sum + (state.answers[q.examIndex] ? 1 : 0), 0);
+  }
+
+  function getFlaggedCount() {
+    return state.examQuestions.reduce((sum, q) => sum + (state.flags[q.examIndex] ? 1 : 0), 0);
+  }
+
+  function getBlankCount() {
+    return state.examQuestions.length - getAnsweredCount();
+  }
+
+  function renderTimer() {
+    const remaining = Math.max(0, Math.ceil((Number(state.deadlineAt || 0) - Date.now()) / 1000));
+    $("timeRemaining").textContent = formatSeconds(remaining);
+    return remaining;
+  }
+
+  function updateFullscreenState() {}
+
+  async function toggleFullscreen() {}
+
+  function renderProgress() {
+    const answered = getAnsweredCount();
+    const total = state.examQuestions.length || 1;
+    const flagged = getFlaggedCount();
+    const blank = getBlankCount();
+    $("answeredCounter").textContent = "Đã trả lời: " + answered + " / " + total;
+    $("flaggedCounter").textContent = "Đánh dấu xem lại: " + flagged;
+    $("blankCounter").textContent = blank;
+    $("questionCounter").textContent = "Câu " + (state.currentIndex + 1) + " / " + total;
+    $("progressBar").style.width = ((answered / total) * 100) + "%";
+    $("readySubmitState").textContent = blank === 0 ? "Có" : "Còn thiếu";
+  }
+
+  function renderNavigator() {
+    const box = $("questionNavGrid");
+    box.innerHTML = "";
+    state.examQuestions.forEach((q, index) => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      const selected = Boolean(state.answers[q.examIndex]);
+      const flagged = Boolean(state.flags[q.examIndex]);
+      btn.className = "nav-q-btn " + [
+        index === state.currentIndex ? "current" : "",
+        selected ? "answered" : "unanswered",
+        flagged ? "flagged" : ""
+      ].filter(Boolean).join(" ");
+      btn.textContent = q.examIndex;
+      btn.title = "Câu " + q.examIndex + (flagged ? " • Đã đánh dấu" : "") + (selected ? " • Đã trả lời" : " • Chưa trả lời");
+      btn.addEventListener("click", () => {
+        state.currentIndex = index;
+        renderQuestion();
+        saveActiveExam();
+      });
+      box.appendChild(btn);
+    });
+  }
+
+  function renderQuestion() {
+    const q = state.examQuestions[state.currentIndex];
+    if (!q) return;
+    $("questionText").textContent = "Câu " + q.examIndex + ". " + q.question;
+    $("questionCategoryBadge").textContent = "Chuyên đề: " + (q.category || "Chung");
+    const isFlagged = Boolean(state.flags[q.examIndex]);
+    $("questionFlagBadge").textContent = "Trạng thái: " + (isFlagged ? "Đã đánh dấu xem lại" : "Chưa đánh dấu");
+    $("btnToggleFlag").textContent = isFlagged ? "Bỏ đánh dấu xem lại" : "Đánh dấu xem lại";
+
+    const optionsBox = $("optionsBox");
+    optionsBox.innerHTML = "";
+    q.options.forEach(option => {
+      const div = document.createElement("div");
+      div.className = "option" + (state.answers[q.examIndex] === option.label ? " selected" : "");
+      div.innerHTML = `
+        <div class="option-line">
+          <span class="letter">${option.label}</span>
+          <span>${escapeHtml(option.text)}</span>
+        </div>
+      `;
+      div.addEventListener("click", () => {
+        state.answers[q.examIndex] = option.label;
+        renderQuestion();
+        renderProgress();
+        renderNavigator();
+        saveActiveExam();
+      });
+      optionsBox.appendChild(div);
+    });
+
+    $("btnPrev").disabled = state.currentIndex === 0;
+    $("btnNext").disabled = state.currentIndex === state.examQuestions.length - 1;
+    renderProgress();
+    renderNavigator();
+  }
+
+  function normalizeCandidateStorageValue(value) {
+    return String(value || "").trim().replace(/\s+/g, " ").toLocaleLowerCase("vi");
+  }
+
+  function buildActiveExamStorageKey(unit, fullName) {
+    const safeUnit = normalizeCandidateStorageValue(unit);
+    const safeName = normalizeCandidateStorageValue(fullName);
+    if (!safeUnit || !safeName) return "";
+    return ACTIVE_EXAM_STORAGE_PREFIX + safeUnit + "||" + safeName;
+  }
+
+  function tryMigrateLegacyActiveExam(unit, fullName) {
+    try {
+      const legacyRaw = localStorage.getItem(ACTIVE_EXAM_STORAGE_KEY);
+      if (!legacyRaw) return null;
+      const parsed = JSON.parse(legacyRaw);
+      if (!parsed || !Array.isArray(parsed.examQuestions) || !parsed.deadlineAt) {
+        localStorage.removeItem(ACTIVE_EXAM_STORAGE_KEY);
+        return null;
+      }
+      if (Date.now() >= Number(parsed.deadlineAt)) {
+        localStorage.removeItem(ACTIVE_EXAM_STORAGE_KEY);
+        return null;
+      }
+      const legacyUnit = normalizeCandidateStorageValue(parsed.candidate?.unit);
+      const legacyName = normalizeCandidateStorageValue(parsed.candidate?.fullName);
+      if (legacyUnit && legacyName && legacyUnit === normalizeCandidateStorageValue(unit) && legacyName === normalizeCandidateStorageValue(fullName)) {
+        const newKey = buildActiveExamStorageKey(unit, fullName);
+        if (newKey) {
+          localStorage.setItem(newKey, JSON.stringify(parsed));
+          localStorage.removeItem(ACTIVE_EXAM_STORAGE_KEY);
+          return parsed;
+        }
+      }
+      return null;
+    } catch (err) {
+      return null;
+    }
+  }
+
+  function saveActiveExam() {
+    if (!state.examQuestions.length || state.submitted) return;
+    const storageKey = buildActiveExamStorageKey(state.candidate.unit, state.candidate.fullName);
+    if (!storageKey) return;
+    const payload = {
+      candidate: state.candidate,
+      examQuestions: state.examQuestions,
+      answers: state.answers,
+      flags: state.flags,
+      currentIndex: state.currentIndex,
+      deadlineAt: state.deadlineAt,
+      settings: state.settings,
+      savedAt: new Date().toISOString()
+    };
+    try {
+      localStorage.setItem(storageKey, JSON.stringify(payload));
+      localStorage.removeItem(ACTIVE_EXAM_STORAGE_KEY);
+    } catch (err) {
+      console.warn("Không lưu được trạng thái bài thi:", err);
+    }
+    renderResumeBox();
+  }
+
+  function clearActiveExam(unit = state.candidate.unit, fullName = state.candidate.fullName) {
+    const storageKey = buildActiveExamStorageKey(unit, fullName);
+    try {
+      if (storageKey) localStorage.removeItem(storageKey);
+      localStorage.removeItem(ACTIVE_EXAM_STORAGE_KEY);
+    } catch (err) {}
+    renderResumeBox();
+  }
+
+  function readActiveExam(unit, fullName) {
+    const storageKey = buildActiveExamStorageKey(unit, fullName);
+    try {
+      if (!storageKey) return null;
+      let raw = localStorage.getItem(storageKey);
+      let parsed = null;
+      if (!raw) {
+        parsed = tryMigrateLegacyActiveExam(unit, fullName);
+        if (!parsed) return null;
+      } else {
+        parsed = JSON.parse(raw);
+      }
+      if (!parsed || !Array.isArray(parsed.examQuestions) || !parsed.deadlineAt) {
+        localStorage.removeItem(storageKey);
+        return null;
+      }
+      if (Date.now() >= Number(parsed.deadlineAt)) {
+        localStorage.removeItem(storageKey);
+        return null;
+      }
+      return parsed;
+    } catch (err) {
+      return null;
+    }
+  }
+
+  function getSelectedCandidateForResume() {
+    const unit = $("unit").value.trim();
+    const roster = getParticipantListByUnit(unit);
+    const idx = Number($("candidateNameSelect").value);
+    const participant = Number.isInteger(idx) && idx >= 0 ? roster[idx] : null;
+    const fullName = participant?.name?.trim() || $("fullName").value.trim();
+    return { unit, fullName, participant };
+  }
+
+  function renderResumeBox() {
+    const box = $("resumeExamBox");
+    const selected = getSelectedCandidateForResume();
+    if (!selected.unit || !selected.fullName) {
+      box.classList.add("hidden");
+      box.innerHTML = "";
+      return;
+    }
+    const saved = readActiveExam(selected.unit, selected.fullName);
+    if (!saved) {
+      box.classList.add("hidden");
+      box.innerHTML = "";
+      return;
+    }
+    const remaining = Math.max(0, Math.ceil((Number(saved.deadlineAt) - Date.now()) / 1000));
+    box.classList.remove("hidden");
+    box.innerHTML = `
+      <div><b>Phát hiện bài làm đang được lưu tạm.</b></div>
+      <div style="margin-top:6px">Thí sinh: <b>${escapeHtml(saved.candidate?.fullName || "-")}</b> • Còn lại: <b>${formatSeconds(remaining)}</b> • Đã trả lời: <b>${Object.keys(saved.answers || {}).length}</b> câu</div>
+      <div class="action-row" style="margin-top:10px">
+        <button type="button" id="btnResumeSavedExam" class="info">Vào làm tiếp</button>
+      </div>
+    `;
+    $("btnResumeSavedExam").onclick = () => restoreSavedExam(selected.unit, selected.fullName);
+  }
+
+  function resetExamState() {
+    clearInterval(state.timerId);
+    state.examQuestions = [];
+    state.answers = {};
+    state.flags = {};
+    state.currentIndex = 0;
+    state.deadlineAt = null;
+    state.submitted = false;
+  }
+
+  function startTimer() {
+    clearInterval(state.timerId);
+    state.timerId = setInterval(() => {
+      const remaining = renderTimer();
+      saveActiveExam();
+      if (remaining <= 0) {
+        clearInterval(state.timerId);
+        alert("Đã hết thời gian làm bài. Hệ thống sẽ tự động nộp bài.");
+        submitExam(true);
+      }
+    }, 1000);
+  }
+
+  async function requestFullscreenOnStart() {}
+
+  function jumpToFirst(predicate) {
+    const idx = state.examQuestions.findIndex(predicate);
+    if (idx >= 0) {
+      state.currentIndex = idx;
+      renderQuestion();
+      saveActiveExam();
+      return true;
+    }
+    return false;
+  }
+
+  async function checkCandidateMonthlyEligibility(unit, fullName, examMonth) {
+    if (!SCRIPT_URL || SCRIPT_URL.includes("PASTE_YOUR")) {
+      return { ok: true, alreadySubmitted: false, localOnly: true };
+    }
+    try {
+      const url = new URL(SCRIPT_URL);
+      url.searchParams.set("action", "candidateStatus");
+      url.searchParams.set("unit", unit);
+      url.searchParams.set("fullName", fullName);
+      url.searchParams.set("examMonth", examMonth);
+      url.searchParams.set("_ts", String(Date.now()));
+      const resp = await fetch(url.toString());
+      const data = await resp.json();
+      if (data && data.ok) return data;
+      return { ok: false, message: data?.message || "Không xác minh được trạng thái dự thi." };
+    } catch (err) {
+      return { ok: false, message: err.message || "Không kết nối được máy chủ xác minh." };
+    }
+  }
+
+  async function startExam() {
+    const startBtn = $("btnStartExam");
+    if (startBtn) {
+      startBtn.disabled = true;
+      startBtn.dataset.originalText = startBtn.dataset.originalText || startBtn.textContent;
+      startBtn.textContent = "Đang vào thi...";
+    }
+    try {
+      const gateStatus = getExamWindowStatus();
+      if (!gateStatus.allowLogin) {
+        alert(gateStatus.message);
+        renderExamGateStatus();
+        return;
+      }
+
+      const unit = $("unit").value.trim();
+      const participant = findEligibleParticipantByName(unit, $("fullName").value) || (() => {
+        const roster = getCandidateExamListByUnit(unit);
+        const idx = Number($("candidateNameSelect").value);
+        return Number.isInteger(idx) && idx >= 0 ? roster[idx] : null;
+      })() || findParticipantByName(unit, $("fullName").value) || (() => {
+        const roster = getParticipantListByUnit(unit);
+        const idx = Number($("candidateNameSelect").value);
+        return Number.isInteger(idx) && idx >= 0 ? roster[idx] : null;
+      })();
+
+      const fullName = participant?.name?.trim() || "";
+      const position = (participant?.position || DEFAULT_POSITION).trim();
+
+      if (!unit) {
+        alert("Vui lòng chọn đơn vị.");
+        return;
+      }
+      if (!getParticipantListByUnit(unit).length) {
+        alert("Đơn vị này chưa được Admin nhập danh sách thí sinh.");
+        return;
+      }
+      if (!fullName) {
+        alert("Vui lòng chọn tên thí sinh trong danh sách.");
+        return;
+      }
+      $("fullName").value = fullName;
+      $("position").value = position;
+
+      state.settings = getEffectiveExamSettingsForUnit(unit);
+      const examPeriod = getConfiguredExamPeriod();
+      if (state.candidatePoolReady) {
+        const eligibleParticipant = findEligibleParticipantByName(unit, fullName);
+        if (!eligibleParticipant) {
+          clearActiveExam(unit, fullName);
+          showCenterAlert("Thí sinh này đã tham gia kỳ thi tháng " + examPeriod.month + " nên không thể đăng nhập thi lại.");
+          return;
+        }
+      }
+
+      const savedExam = readActiveExam(unit, fullName);
+      if (savedExam) {
+        restoreSavedExam(unit, fullName);
+        return;
+      }
+
+      if (!state.allQuestions.length) {
+        alert("Gói câu hỏi chưa sẵn sàng.");
+        return;
+      }
+      if (getQuestionCount() > state.allQuestions.length) {
+        alert("Số câu cấu hình lớn hơn số câu hiện có trong ngân hàng.");
+        return;
+      }
+
+      resetExamState();
+      state.settings = readAdminSettingsForm ? state.settings : state.settings;
+      state.candidate = { fullName, unit, position };
+      state.examQuestions = consumePreparedExamDraft();
+      state.deadlineAt = Date.now() + (state.settings.timeMinutes * 60 * 1000);
+
+      $("candidateNameView").textContent = fullName;
+      $("candidateUnitView").textContent = unit;
+      $("candidatePositionView").textContent = position;
+
+      updateMain("Đang làm bài thi", buildExamCycleLabel(examPeriod.month, examPeriod.round));
+      showOnly("examPanel");
+      renderQuestion();
+      renderTimer();
+      startTimer();
+      setTimeout(saveActiveExam, 0);
+    } finally {
+      if (startBtn) {
+        startBtn.textContent = startBtn.dataset.originalText || "Bắt đầu thi";
+        startBtn.disabled = !getExamWindowStatus().allowLogin ? true : !$("fullName").value.trim();
+      }
+    }
+  }
+
+  function restoreSavedExam(unit, fullName) {
+    const saved = readActiveExam(unit, fullName);
+    if (!saved) {
+      alert("Không còn bài lưu tạm hợp lệ.");
+      renderResumeBox();
+      return;
+    }
+    resetExamState();
+    state.candidate = saved.candidate || { fullName: "", unit: "", position: "" };
+    state.examQuestions = saved.examQuestions || [];
+    state.answers = saved.answers || {};
+    state.flags = saved.flags || {};
+    state.currentIndex = Math.min(Number(saved.currentIndex || 0), Math.max(0, (saved.examQuestions || []).length - 1));
+    state.deadlineAt = Number(saved.deadlineAt);
+    state.settings = normalizeExamSettings(saved.settings || state.settings);
+
+    $("unit").value = state.candidate.unit || "";
+    refreshCandidateNameOptions(state.candidate.fullName || "");
+    $("fullName").value = state.candidate.fullName || "";
+    $("position").value = state.candidate.position || DEFAULT_POSITION;
+    handleCandidateNameChange();
+    $("candidateNameView").textContent = state.candidate.fullName || "-";
+    $("candidateUnitView").textContent = state.candidate.unit || "-";
+    updateCandidateStructureSummary(state.candidate.unit || "");
+    $("candidatePositionView").textContent = state.candidate.position || "-";
+
+    updateMain("Khôi phục bài làm", "Bài thi đã được khôi phục từ trạng thái tự lưu.");
+    showOnly("examPanel");
+    renderQuestion();
+    renderTimer();
+    startTimer();
+  }
+
+  function buildResultPayload(correctCount, total, usedSeconds, detailRows) {
+    const examPeriod = getConfiguredExamPeriod();
+    return {
+      action: "submit",
+      submittedAt: new Date().toISOString(),
+      fullName: state.candidate.fullName,
+      unit: state.candidate.unit,
+      position: state.candidate.position,
+      score: correctCount,
+      convertedScore: Number((correctCount * POINTS_PER_CORRECT).toFixed(1)),
+      total,
+      percent: Number(((correctCount / total) * 100).toFixed(2)),
+      usedSeconds,
+      usedTimeText: formatUsedSecondsText(usedSeconds),
+      questionCount: total,
+      examMonth: examPeriod.month,
+      examRound: examPeriod.round,
+      examKey: examPeriod.month + "::" + examPeriod.round,
+      answerDetails: detailRows,
+      settingsSnapshot: state.settings,
+      examPeriodSnapshot: examPeriod
+    };
+  }
+
+  async function sendResultToServer(payload) {
+    if (!SCRIPT_URL || SCRIPT_URL.includes("PASTE_YOUR")) {
+      return { ok: false, message: "Chưa cấu hình SCRIPT_URL." };
+    }
+    try {
+      const resp = await fetch(SCRIPT_URL, {
+        method: "POST",
+        body: JSON.stringify(payload),
+        headers: { "Content-Type": "text/plain;charset=utf-8" }
+      });
+      const data = await resp.json().catch(() => ({ ok: true }));
+      return data && typeof data.ok !== "undefined" ? data : { ok: true };
+    } catch (err) {
+      return { ok: false, message: err.message || "Không gửi được kết quả" };
+    }
+  }
+
+  function renderResultMetrics(detailRows, usedSeconds) {
+    const total = detailRows.length || 1;
+    const correct = detailRows.filter(r => r.result === "Đúng").length;
+    const wrong = detailRows.filter(r => r.result === "Sai").length;
+    const blank = detailRows.filter(r => !r.selected).length;
+    const flagged = detailRows.filter(r => r.flagged).length;
+
+    $("metricCorrectFill").style.width = ((correct / total) * 100) + "%";
+    $("metricWrongFill").style.width = ((wrong / total) * 100) + "%";
+    $("metricBlankFill").style.width = ((blank / total) * 100) + "%";
+    $("metricFlaggedFill").style.width = ((flagged / total) * 100) + "%";
+    $("metricCorrectText").textContent = correct + "/" + total;
+    $("metricWrongText").textContent = wrong + "/" + total;
+    $("metricBlankText").textContent = blank + "/" + total;
+    $("metricFlaggedText").textContent = flagged + "/" + total;
+    $("resultTimeAndRuleBox").innerHTML =
+      "Thời gian đã dùng: <b>" + formatUsedSecondsText(usedSeconds) + "</b><br>" +
+      "Phân loại mặc định: <b>Dưới 5: Yếu</b> • <b>5 đến dưới 7: Trung bình</b> • <b>7 đến dưới 9: Khá</b> • <b>Từ 9 trở lên: Xuất sắc</b>";
+  }
+
+  function computeGroupSummaryFromDetails(detailRows) {
+    const map = {};
+    detailRows.forEach(row => {
+      const key = row.category || "Chung";
+      if (!map[key]) map[key] = { category: key, total: 0, correct: 0, wrong: 0, blank: 0 };
+      map[key].total += 1;
+      if (!row.selected) map[key].blank += 1;
+      if (row.result === "Đúng") map[key].correct += 1;
+      if (row.result === "Sai") map[key].wrong += 1;
+    });
+    return Object.values(map).sort((a, b) => a.category.localeCompare(b.category, "vi"));
+  }
+
+  function renderResultGroupAnalysis(detailRows) {
+    const box = $("resultGroupAnalysis");
+    const groups = computeGroupSummaryFromDetails(detailRows);
+    if (!groups.length) {
+      box.innerHTML = '<div class="muted">Chưa có dữ liệu phân tích.</div>';
+      return;
+    }
+    box.innerHTML = groups.map(item => {
+      const rate = item.total ? ((item.correct / item.total) * 100).toFixed(1) : "0.0";
+      return `
+        <div class="group-item">
+          <div class="group-item-head">
+            <div><b>${escapeHtml(item.category)}</b></div>
+            <div><b>${rate}%</b></div>
+          </div>
+          <div class="group-item-sub">
+            Tổng: ${item.total} • Đúng: ${item.correct} • Sai: ${item.wrong} • Bỏ trống: ${item.blank}
+          </div>
+        </div>
+      `;
+    }).join("");
+  }
+
+  async function submitExam(autoSubmit = false) {
+    if (state.submitted) return;
+    const unanswered = getBlankCount();
+    const flagged = getFlaggedCount();
+
+    if (!autoSubmit) {
+      const ok = confirm(
+        "Bạn chắc chắn muốn nộp bài?\n" +
+        "- Câu chưa trả lời: " + unanswered + "\n" +
+        "- Câu đánh dấu xem lại: " + flagged
+      );
+      if (!ok) return;
+    }
+
+    clearInterval(state.timerId);
+    state.submitted = true;
+
+    const total = state.examQuestions.length;
+    let correctCount = 0;
+    const detailRows = state.examQuestions.map((q, idx) => {
+      const selected = state.answers[q.examIndex] || "";
+      const isCorrect = selected === q.correct;
+      if (isCorrect) correctCount++;
+      return {
+        stt: idx + 1,
+        questionId: q.id,
+        category: q.category || "Chung",
+        question: q.question,
+        selected,
+        correct: q.correct,
+        result: isCorrect ? "Đúng" : "Sai",
+        basis: q.basis || q.explanation || "",
+        flagged: Boolean(state.flags[q.examIndex])
+      };
+    });
+
+    state.lastResultRows = detailRows;
+    const usedSeconds = Math.max(0, Math.round((state.settings.timeMinutes * 60) - ((Number(state.deadlineAt) - Date.now()) / 1000)));
+    const convertedScore = Number((correctCount * POINTS_PER_CORRECT).toFixed(1));
+    const payload = buildResultPayload(correctCount, total, usedSeconds, detailRows);
+
+    $("resultName").textContent = state.candidate.fullName;
+    $("resultUnit").textContent = state.candidate.unit;
+    $("resultPosition").textContent = state.candidate.position;
+    $("resultScore").textContent = convertedScore.toFixed(1) + " điểm (" + correctCount + "/" + total + " câu đúng)";
+    const passState = getPassState(convertedScore);
+    $("resultStatusText").textContent = passState;
+    $("resultStatusText").className = "value " + getResultClass(passState);
+
+    renderResultMetrics(detailRows, usedSeconds);
+    renderResultGroupAnalysis(detailRows);
+
+    const detailBody = $("resultDetailBody");
+    detailBody.innerHTML = "";
+    detailRows.forEach(row => {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td>${row.stt}</td>
+        <td>${escapeHtml(row.category)}</td>
+        <td class="basis-text">${escapeHtml(row.question)}</td>
+        <td>${escapeHtml(row.selected || "Chưa chọn")}</td>
+        <td>${escapeHtml(row.correct)}</td>
+        <td class="${row.result === "Đúng" ? "result-pass" : "result-fail"}">${row.result}</td>
+        <td class="basis-text">${escapeHtml(row.basis || "")}</td>
+      `;
+      detailBody.appendChild(tr);
+    });
+
+    const submitStatus = $("submitStatus");
+    submitStatus.className = "status info";
+    submitStatus.textContent = "Đang gửi kết quả lên hệ thống...";
+
+    const serverResult = await sendResultToServer(payload);
+    if (serverResult.ok) {
+      submitStatus.className = "status success";
+      submitStatus.textContent = "Nộp bài thành công. Kết quả đã được lưu để admin tổng hợp.";
+    } else {
+      submitStatus.className = "status warning";
+      submitStatus.textContent = "Bài thi đã chấm xong trên trình duyệt nhưng chưa lưu tập trung: " + (serverResult.message || "Lỗi chưa xác định") + ".";
+    }
+
+    clearActiveExam();
+    updateMain("Kết quả bài thi", "Bài thi đã được chấm xong, hiển thị chi tiết từng câu và căn cứ.");
+    showOnly("resultPanel");
+  }
+
+  function getFirstNonEmptyValue(obj, keys) {
+    if (!obj || typeof obj !== "object") return "";
+    for (const key of keys) {
+      if (Object.prototype.hasOwnProperty.call(obj, key)) {
+        const value = obj[key];
+        if (value !== undefined && value !== null && String(value).trim() !== "") return value;
+      }
+    }
+    return "";
+  }
+
+  function parseFlexibleNumber(value) {
+    if (typeof value === "number") return Number.isFinite(value) ? value : null;
+    if (value === undefined || value === null) return null;
+    const raw = String(value).trim();
+    if (!raw) return null;
+    const normalized = raw.replace(/\s+/g, "").replace(/%/g, "").replace(/,/g, ".");
+    const match = normalized.match(/-?\d+(?:\.\d+)?/);
+    if (!match) return null;
+    const parsed = Number(match[0]);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+
+  function extractFractionParts(value) {
+    if (value === undefined || value === null) return null;
+    const raw = String(value).trim();
+    if (!raw) return null;
+    const normalized = raw.replace(/\s+/g, "").replace(/,/g, ".");
+    const match = normalized.match(/(-?\d+(?:\.\d+)?)\/(\d+(?:\.\d+)?)/);
+    if (!match) return null;
+    const first = Number(match[1]);
+    const second = Number(match[2]);
+    if (!Number.isFinite(first) || !Number.isFinite(second) || second <= 0) return null;
+    return { first, second };
+  }
+
+  function parseJSONMaybe(value, fallback) {
+    if (Array.isArray(value) || (value && typeof value === "object")) return value;
+    if (typeof value !== "string") return fallback;
+    try {
+      return JSON.parse(value);
+    } catch (err) {
+      return fallback;
+    }
+  }
+
+  function normalizeAdminRow(row) {
+    const totalText = getFirstNonEmptyValue(row, ["total", "questionCount", "totalQuestions", "tongCau", "soCau", "Tổng câu", "question_count"]);
+    const correctText = getFirstNonEmptyValue(row, ["correctCount", "correctAnswers", "soCauDung", "Số câu đúng"]);
+    const convertedText = getFirstNonEmptyValue(row, ["convertedScore", "point", "points", "diem", "Điểm"]);
+    const percentText = getFirstNonEmptyValue(row, ["percent", "percentage", "tyLe", "tỷ lệ", "Tỷ lệ"]);
+    const scoreText = getFirstNonEmptyValue(row, ["score", "resultScore", "ketQua", "kết quả"]);
+
+    const totalFromField = parseFlexibleNumber(totalText);
+    const totalFromCorrectFraction = extractFractionParts(correctText)?.second ?? null;
+    const totalFromScoreFraction = extractFractionParts(scoreText)?.second ?? null;
+    const total = Math.max(1, Math.round(totalFromField || totalFromCorrectFraction || totalFromScoreFraction || state.settings.totalQuestions || DEFAULT_SETTINGS.totalQuestions));
+
+    let correctCount = parseFlexibleNumber(correctText);
+    const correctFraction = extractFractionParts(correctText);
+    const scoreFraction = extractFractionParts(scoreText);
+    if (correctFraction) correctCount = correctFraction.first;
+    if (correctCount === null && scoreFraction) correctCount = scoreFraction.first;
+    if (correctCount === null) {
+      const converted = parseFlexibleNumber(convertedText);
+      if (converted !== null) correctCount = converted / POINTS_PER_CORRECT;
+    }
+    if (correctCount === null) {
+      const genericScore = parseFlexibleNumber(scoreText);
+      if (genericScore !== null && genericScore <= total * POINTS_PER_CORRECT + 0.001) {
+        correctCount = genericScore / POINTS_PER_CORRECT;
+      } else if (genericScore !== null) {
+        correctCount = genericScore;
+      }
+    }
+    correctCount = Math.min(total, Math.max(0, Math.round(correctCount || 0)));
+
+    let convertedScore = parseFlexibleNumber(convertedText);
+    if (convertedScore === null) convertedScore = Number((correctCount * POINTS_PER_CORRECT).toFixed(1));
+
+    let percent = parseFlexibleNumber(percentText);
+    if (percent === null) percent = total ? (correctCount / total) * 100 : 0;
+
+    const answerDetailsValue = getFirstNonEmptyValue(row, ["answerDetails", "details", "chiTiet", "answer_details"]);
+    const answerDetails = parseJSONMaybe(answerDetailsValue, []);
+    const settingsSnapshotValue = getFirstNonEmptyValue(row, ["settingsSnapshot", "settings", "examSettings"]);
+    const settingsSnapshot = normalizeExamSettings(parseJSONMaybe(settingsSnapshotValue, {}));
+    const examPeriodSnapshotValue = getFirstNonEmptyValue(row, ["examPeriodSnapshot", "examPeriod", "periodSnapshot"]);
+    const examPeriodSnapshot = normalizeExamPeriod(parseJSONMaybe(examPeriodSnapshotValue, {
+      month: getFirstNonEmptyValue(row, ["examMonth", "periodMonth", "thangThi"]),
+      round: getFirstNonEmptyValue(row, ["examRound", "round", "dotThi"])
+    }));
+
+    const submittedAt = getFirstNonEmptyValue(row, ["submittedAt", "timestamp", "time", "Thời gian nộp"]);
+
+    return {
+      submittedAt,
+      fullName: getFirstNonEmptyValue(row, ["fullName", "name", "hoTen", "Họ và tên"]),
+      unit: getFirstNonEmptyValue(row, ["unit", "donVi", "Đơn vị"]),
+      position: getFirstNonEmptyValue(row, ["position", "chucVu", "Chức vụ"]),
+      score: Number(convertedScore || 0),
+      correctCount,
+      total,
+      percent: Number(percent || 0),
+      usedSeconds: parseFlexibleNumber(getFirstNonEmptyValue(row, ["usedSeconds", "durationSeconds", "seconds"])) || 0,
+      usedTimeText: getFirstNonEmptyValue(row, ["usedTimeText", "durationText", "Thời gian làm bài"]),
+      answerDetails: Array.isArray(answerDetails) ? answerDetails : [],
+      settingsSnapshot,
+      examMonth: normalizeMonthValue(examPeriodSnapshot.month || getFirstNonEmptyValue(row, ["examMonth", "periodMonth", "thangThi"]), getCurrentMonthValue()),
+      examRound: normalizeExamRound(examPeriodSnapshot.round || getFirstNonEmptyValue(row, ["examRound", "round", "dotThi"])),
+      examPeriodSnapshot,
+      passState: getPassState(Number(convertedScore || 0)),
+      raw: row
+    };
+  }
+
+  async function fetchAdminResults() {
+    if (!SCRIPT_URL || SCRIPT_URL.includes("PASTE_YOUR")) {
+      alert("Bạn chưa cấu hình SCRIPT_URL trong file HTML.");
+      return;
+    }
+    try {
+      const url = SCRIPT_URL + (SCRIPT_URL.includes("?") ? "&" : "?") + "action=list&_ts=" + Date.now();
+      const resp = await fetch(url);
+      const data = await resp.json();
+      const rows = Array.isArray(data.rows) ? data.rows.map(normalizeAdminRow) : [];
+      state.adminRows = rows;
+      populateAdminFilterOptions(rows);
+      $("reportMonth").value = normalizeMonthValue(state.reportMonth || getConfiguredExamPeriod().month, getConfiguredExamPeriod().month);
+      applyAdminFilters();
+    } catch (err) {
+      alert("Không tải được kết quả tổng hợp. Kiểm tra lại Apps Script hoặc quyền triển khai Web App.");
+    }
+  }
+
+  function populateSelectOptions(selectId, values, placeholder) {
+    const select = $(selectId);
+    const current = select.value;
+    select.innerHTML = `<option value="">${placeholder}</option>` + values.map(v => `<option>${escapeHtml(v)}</option>`).join("");
+    if (values.includes(current)) select.value = current;
+  }
+
+  function populateAdminFilterOptions(rows) {
+    const units = [...new Set(rows.map(r => r.unit).filter(Boolean))].sort((a, b) => a.localeCompare(b, "vi"));
+    const positions = [...new Set(rows.map(r => r.position).filter(Boolean))].sort((a, b) => a.localeCompare(b, "vi"));
+    populateSelectOptions("filterUnit", units, "-- Tất cả đơn vị --");
+    populateSelectOptions("filterPosition", positions, "-- Tất cả chức vụ --");
+    if (!$("reportMonth").value) $("reportMonth").value = normalizeMonthValue(state.reportMonth || getConfiguredExamPeriod().month, getConfiguredExamPeriod().month);
+    renderReportMonthStatus();
+  }
+
+  function getFilteredAdminRows() {
+    const reportMonth = getSelectedReportMonth();
+    state.reportMonth = reportMonth;
+    const filterRound = getSelectedReportRound();
+    const keyword = $("filterKeyword").value.trim().toLowerCase();
+    const unit = $("filterUnit").value.trim();
+    const position = $("filterPosition").value.trim();
+    const passStatus = $("filterPassStatus").value.trim();
+    const dateFrom = $("filterDateFrom").value;
+    const dateTo = $("filterDateTo").value;
+    const minScore = parseFlexibleNumber($("filterMinScore").value);
+    const maxScore = parseFlexibleNumber($("filterMaxScore").value);
+
+    return state.adminRows.filter(row => {
+      if (reportMonth && normalizeMonthValue(row.examMonth || "", "") !== reportMonth) return false;
+      if (filterRound && String(row.examRound || "").trim() !== filterRound) return false;
+      const haystack = [row.fullName, row.unit, row.position].join(" ").toLowerCase();
+      if (keyword && !haystack.includes(keyword)) return false;
+      if (unit && row.unit !== unit) return false;
+      if (position && row.position !== position) return false;
+      if (passStatus && row.passState !== passStatus) return false;
+      if (minScore !== null && Number(row.score) < minScore) return false;
+      if (maxScore !== null && Number(row.score) > maxScore) return false;
+
+      if (dateFrom || dateTo) {
+        const d = new Date(row.submittedAt);
+        if (isNaN(d)) return false;
+        const dateOnly = d.toISOString().slice(0, 10);
+        if (dateFrom && dateOnly < dateFrom) return false;
+        if (dateTo && dateOnly > dateTo) return false;
+      }
+      return true;
+    });
+  }
+
+  function renderAdminRows(rows) {
+    const body = $("adminResultBody");
+    body.innerHTML = "";
+
+    if (!rows.length) {
+      body.innerHTML = `<tr><td colspan="10" class="muted">Chưa có dữ liệu phù hợp trong tháng báo cáo đang chọn.</td></tr>`;
+      $("statTotal").textContent = "0";
+      $("statAverage").textContent = "0";
+      $("statMax").textContent = "0";
+      $("statMin").textContent = "0";
+      $("statPassRate").textContent = "0%";
+      renderAdminGroupAnalysis([]);
+      renderQuestionAnalytics([]);
+      renderAttendanceReport();
+      return;
+    }
+
+    const sorted = [...rows].sort((a, b) => new Date(b.submittedAt || 0) - new Date(a.submittedAt || 0));
+    let totalScore = 0;
+    let max = -Infinity;
+    let min = Infinity;
+    let passCount = 0;
+
+    sorted.forEach((row, idx) => {
+      totalScore += Number(row.score || 0);
+      max = Math.max(max, Number(row.score || 0));
+      min = Math.min(min, Number(row.score || 0));
+      if (Number(row.score || 0) >= Number(state.settings.passScore || 5)) passCount++;
+
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td>${idx + 1}</td>
+        <td>${escapeHtml(formatDateTime(row.submittedAt))}</td>
+        <td>${escapeHtml(row.fullName || "")}</td>
+        <td>${escapeHtml(row.position || "")}</td>
+        <td>${escapeHtml(row.unit || "")}</td>
+        <td>${Number(row.score || 0).toFixed(1)}</td>
+        <td>${Number(row.correctCount || 0)}/${Number(row.total || 0)}</td>
+        <td>${Number(row.percent || 0).toFixed(2)}%</td>
+        <td class="${getResultClass(row.passState)}">${row.passState}</td>
+        <td>${escapeHtml(row.usedTimeText || formatUsedSecondsText(Number(row.usedSeconds || 0)))}</td>
+      `;
+      body.appendChild(tr);
+    });
+
+    $("statTotal").textContent = String(sorted.length);
+    $("statAverage").textContent = (totalScore / sorted.length).toFixed(2);
+    $("statMax").textContent = max.toFixed(1);
+    $("statMin").textContent = min.toFixed(1);
+    $("statPassRate").textContent = ((passCount / sorted.length) * 100).toFixed(1) + "%";
+
+    renderAdminGroupAnalysis(sorted);
+    renderQuestionAnalytics(sorted);
+    renderAttendanceReport();
+  }
+
+  function renderAdminGroupAnalysis(rows) {
+    const box = $("adminGroupAnalysis");
+    if (!box) return;
+    const groupMap = {};
+    rows.forEach(row => {
+      (row.answerDetails || []).forEach(detail => {
+        const cat = detail.category || "Chung";
+        if (!groupMap[cat]) groupMap[cat] = { category: cat, total: 0, correct: 0, wrong: 0 };
+        groupMap[cat].total++;
+        if (detail.result === "Đúng") groupMap[cat].correct++;
+        else groupMap[cat].wrong++;
+      });
+    });
+    const items = Object.values(groupMap).sort((a, b) => a.category.localeCompare(b.category, "vi"));
+    if (!items.length) {
+      box.innerHTML = '<div class="muted">Chưa có dữ liệu phân tích nhóm. Tính năng này hoạt động tốt nhất với các bài thi gửi từ phiên bản app mới.</div>';
+      return;
+    }
+    box.innerHTML = items.map(item => {
+      const rate = item.total ? ((item.correct / item.total) * 100).toFixed(1) : "0.0";
+      return `
+        <div class="group-item">
+          <div class="group-item-head">
+            <div><b>${escapeHtml(item.category)}</b></div>
+            <div><b>${rate}%</b></div>
+          </div>
+          <div class="group-item-sub">Tổng lượt trả lời: ${item.total} • Đúng: ${item.correct} • Sai: ${item.wrong}</div>
+        </div>
+      `;
+    }).join("");
+  }
+
+  function renderQuestionAnalytics(rows) {
+    const body = $("questionAnalyticsBody");
+    if (!body) return;
+    body.innerHTML = "";
+    const map = {};
+    rows.forEach(row => {
+      (row.answerDetails || []).forEach(detail => {
+        const key = (detail.questionId || detail.stt || "") + "|" + (detail.question || "");
+        if (!map[key]) {
+          map[key] = {
+            stt: detail.stt || "",
+            category: detail.category || "Chung",
+            question: detail.question || "",
+            A: 0, B: 0, C: 0, D: 0,
+            total: 0,
+            correctCount: 0
+          };
+        }
+        const item = map[key];
+        const selected = String(detail.selected || "").toUpperCase();
+        if (["A","B","C","D"].includes(selected)) item[selected]++;
+        item.total++;
+        if (detail.result === "Đúng") item.correctCount++;
+      });
+    });
+    const items = Object.values(map).sort((a, b) => Number(a.stt || 0) - Number(b.stt || 0));
+    if (!items.length) {
+      body.innerHTML = '<tr><td colspan="8" class="muted">Chưa có dữ liệu phân tích câu hỏi.</td></tr>';
+      return;
+    }
+    items.forEach(item => {
+      const rate = item.total ? ((item.correctCount / item.total) * 100).toFixed(1) + "%" : "0%";
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td>${escapeHtml(item.stt)}</td>
+        <td>${escapeHtml(item.category)}</td>
+        <td class="basis-text">${escapeHtml(item.question)}</td>
+        <td>${item.A}</td>
+        <td>${item.B}</td>
+        <td>${item.C}</td>
+        <td>${item.D}</td>
+        <td>${rate}</td>
+      `;
+      body.appendChild(tr);
+    });
+  }
+
+  function applyAdminFilters() {
+    state.filteredAdminRows = getFilteredAdminRows();
+    renderAdminRows(state.filteredAdminRows);
+  }
+
+  function exportAdminCsv() {
+    const rows = state.filteredAdminRows.length ? state.filteredAdminRows : state.adminRows;
+    if (!rows.length) {
+      alert("Chưa có dữ liệu để xuất.");
+      return;
+    }
+    const headers = ["STT","Thời gian nộp","Họ và tên","Chức vụ","Đơn vị","Điểm","Số câu đúng","Tổng câu","Tỷ lệ","Kết quả","Thời gian làm bài"];
+    const lines = [headers.join(",")];
+    rows.forEach((row, idx) => {
+      const values = [
+        idx + 1,
+        csvSafe(formatDateTime(row.submittedAt)),
+        csvSafe(row.fullName || ""),
+        csvSafe(row.position || ""),
+        csvSafe(row.unit || ""),
+        Number(row.score || 0).toFixed(1),
+        Number(row.correctCount || 0),
+        Number(row.total || 0),
+        Number(row.percent || 0).toFixed(2) + "%",
+        csvSafe(row.passState || ""),
+        csvSafe(row.usedTimeText || formatUsedSecondsText(Number(row.usedSeconds || 0)))
+      ];
+      lines.push(values.join(","));
+    });
+    const blob = new Blob(["\ufeff" + lines.join("\n")], { type: "text/csv;charset=utf-8;" });
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = "tong_hop_ket_qua_thi_" + getSelectedReportMonth() + ".csv";
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+  }
+
+  function exportAdminExcel() {
+    const rows = state.filteredAdminRows.length ? state.filteredAdminRows : state.adminRows;
+    if (!rows.length) {
+      alert("Chưa có dữ liệu để xuất.");
+      return;
+    }
+    const sheetRows = rows.map((row, idx) => ({
+      STT: idx + 1,
+      "Thời gian nộp": formatDateTime(row.submittedAt),
+      "Họ và tên": row.fullName || "",
+      "Chức vụ": row.position || "",
+      "Đơn vị": row.unit || "",
+      "Điểm": Number(row.score || 0).toFixed(1),
+      "Số câu đúng": Number(row.correctCount || 0),
+      "Tổng câu": Number(row.total || 0),
+      "Tỷ lệ": Number(row.percent || 0).toFixed(2) + "%",
+      "Kết quả": row.passState || "",
+      "Thời gian làm bài": row.usedTimeText || formatUsedSecondsText(Number(row.usedSeconds || 0))
+    }));
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.json_to_sheet(sheetRows);
+    XLSX.utils.book_append_sheet(wb, ws, "Tong hop");
+    XLSX.writeFile(wb, "tong_hop_ket_qua_thi_" + getSelectedReportMonth() + ".xlsx");
+  }
+
+  function exportResultExcel() {
+    if (!state.lastResultRows.length) {
+      alert("Chưa có dữ liệu kết quả để xuất.");
+      return;
+    }
+    const sheetRows = state.lastResultRows.map(row => ({
+      STT: row.stt,
+      "Chuyên đề": row.category,
+      "Nội dung câu hỏi": row.question,
+      "Đáp án chọn": row.selected || "Chưa chọn",
+      "Đáp án đúng": row.correct,
+      "Kết quả": row.result,
+      "Căn cứ": row.basis || ""
+    }));
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.json_to_sheet(sheetRows);
+    XLSX.utils.book_append_sheet(wb, ws, "Ket qua chi tiet");
+    XLSX.writeFile(wb, "ket_qua_chi_tiet_thi.xlsx");
+  }
+
+  function printWindow(title, bodyHtml) {
+    const w = window.open("", "_blank");
+    if (!w) return;
+    w.document.write(`
+      <!DOCTYPE html>
+      <html lang="vi">
+      <head>
+        <meta charset="UTF-8">
+        <title>${escapeHtml(title)}</title>
+        <style>
+          body{font-family:"Times New Roman", Times, serif;margin:24px;color:#000}
+          .head{display:flex;justify-content:space-between;gap:24px;margin-bottom:14px}
+          .head div{width:50%;text-align:center;font-weight:700;line-height:1.5}
+          .title{text-align:center;font-weight:700;font-size:22px;margin:16px 0}
+          .sub{text-align:center;margin-bottom:12px}
+          table{width:100%;border-collapse:collapse;margin-top:12px}
+          th,td{border:1px solid #000;padding:6px 8px;vertical-align:top;font-size:14px}
+          .table-center th,.table-center td{text-align:center;vertical-align:middle}
+          .report-total-row td{font-weight:700}
+          .summary{margin-bottom:12px;line-height:1.7}
+        </style>
+      </head>
+      <body>
+        ${bodyHtml}
+      </body>
+      </html>
+    `);
+    w.document.close();
+    w.focus();
+    setTimeout(() => w.print(), 200);
+  }
+
+  function printResult() {
+    if (!state.lastResultRows.length) {
+      alert("Chưa có phiếu kết quả để in.");
+      return;
+    }
+    const rowsHtml = state.lastResultRows.map(row => `
+      <tr>
+        <td>${row.stt}</td>
+        <td>${escapeHtml(row.category)}</td>
+        <td>${escapeHtml(row.question)}</td>
+        <td>${escapeHtml(row.selected || "Chưa chọn")}</td>
+        <td>${escapeHtml(row.correct)}</td>
+        <td>${escapeHtml(row.result)}</td>
+        <td>${escapeHtml(row.basis || "")}</td>
+      </tr>
+    `).join("");
+    printWindow("Phiếu kết quả", `
+      <div class="head">
+        <div>PHÒNG CẢNH SÁT PCCC VÀ CNCH<br>ĐỘI CÔNG TÁC PHÒNG CHÁY</div>
+        <div>CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM<br>Độc lập - Tự do - Hạnh phúc</div>
+      </div>
+      <div class="title">PHIẾU KẾT QUẢ KIỂM TRA TRỰC TUYẾN</div>
+      <div class="summary">
+        <b>Họ và tên:</b> ${escapeHtml(state.candidate.fullName)}<br>
+        <b>Chức vụ:</b> ${escapeHtml(state.candidate.position)}<br>
+        <b>Đơn vị:</b> ${escapeHtml(state.candidate.unit)}<br>
+        <b>Kết quả:</b> ${escapeHtml($("resultScore").textContent)} • ${escapeHtml($("resultStatusText").textContent)}
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>STT</th><th>Chuyên đề</th><th>Nội dung câu hỏi</th><th>Đáp án chọn</th><th>Đáp án đúng</th><th>Kết quả</th><th>Căn cứ</th>
+          </tr>
+        </thead>
+        <tbody>${rowsHtml}</tbody>
+      </table>
+    `);
+  }
+
+  function printAdminSummary() {
+    const rows = state.filteredAdminRows.length ? state.filteredAdminRows : state.adminRows;
+    if (!rows.length) {
+      alert("Chưa có dữ liệu để in.");
+      return;
+    }
+    const rowsHtml = rows.map((row, idx) => `
+      <tr>
+        <td>${idx + 1}</td>
+        <td>${escapeHtml(formatDateTime(row.submittedAt))}</td>
+        <td>${escapeHtml(row.fullName || "")}</td>
+        <td>${escapeHtml(row.position || "")}</td>
+        <td>${escapeHtml(row.unit || "")}</td>
+        <td>${Number(row.score || 0).toFixed(1)}</td>
+        <td>${Number(row.correctCount || 0)}/${Number(row.total || 0)}</td>
+        <td>${Number(row.percent || 0).toFixed(2)}%</td>
+        <td>${escapeHtml(row.passState || "")}</td>
+        <td>${escapeHtml(row.usedTimeText || formatUsedSecondsText(Number(row.usedSeconds || 0)))}</td>
+      </tr>
+    `).join("");
+    printWindow("Bảng tổng hợp kết quả", `
+      <div class="head">
+        <div>PHÒNG CẢNH SÁT PCCC VÀ CNCH<br>ĐỘI CÔNG TÁC PHÒNG CHÁY</div>
+        <div>CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM<br>Độc lập - Tự do - Hạnh phúc</div>
+      </div>
+      <div class="title">BẢNG TỔNG HỢP KẾT QUẢ KIỂM TRA</div>
+      <div class="sub">Thời gian in: ${escapeHtml(formatDateTime(new Date().toISOString()))}</div>
+      <table>
+        <thead>
+          <tr>
+            <th>#</th><th>Thời gian nộp</th><th>Họ và tên</th><th>Chức vụ</th><th>Đơn vị</th><th>Điểm</th><th>Số câu đúng</th><th>Tỷ lệ</th><th>Kết quả</th><th>Thời gian làm bài</th>
+          </tr>
+        </thead>
+        <tbody>${rowsHtml}</tbody>
+      </table>
+    `);
+  }
+
+  function getReportScopeLabel(report) {
+    const round = report.selectedRound || "";
+    return round && round !== "Chính"
+      ? "Tháng " + report.reportMonth + " • Đợt " + round
+      : "Tháng " + report.reportMonth + " • Đợt Chính";
+  }
+
+  function printAttendanceUnitSummary() {
+    const report = buildAttendanceReportData();
+    if (!report.unitRows.length) {
+      alert("Chưa có dữ liệu tổng hợp theo đơn vị để in.");
+      return;
+    }
+    const rowsHtml = report.unitRows.map((item, idx) => `
+      <tr>
+        <td>${idx + 1}</td>
+        <td>${escapeHtml(item.unit)}</td>
+        <td>${item.total}</td>
+        <td>${item.present}</td>
+        <td>${item.absent}</td>
+        <td>${item.grades["Yếu"] || 0}</td>
+        <td>${item.grades["Trung bình"] || 0}</td>
+        <td>${item.grades["Khá"] || 0}</td>
+        <td>${item.grades["Xuất sắc"] || 0}</td>
+        <td>${item.rate.toFixed(1)}%</td>
+      </tr>
+    `).join("") + `
+      <tr class="report-total-row">
+        <td></td>
+        <td>Tổng</td>
+        <td>${report.totalRegistered}</td>
+        <td>${report.totalPresent}</td>
+        <td>${report.totalAbsent}</td>
+        <td>${report.overallGrades["Yếu"] || 0}</td>
+        <td>${report.overallGrades["Trung bình"] || 0}</td>
+        <td>${report.overallGrades["Khá"] || 0}</td>
+        <td>${report.overallGrades["Xuất sắc"] || 0}</td>
+        <td>${report.rate.toFixed(1)}%</td>
+      </tr>`;
+    printWindow("Tổng hợp theo đơn vị", `
+      <div class="head">
+        <div>PHÒNG CẢNH SÁT PCCC VÀ CNCH<br>ĐỘI CÔNG TÁC PHÒNG CHÁY</div>
+        <div>CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM<br>Độc lập - Tự do - Hạnh phúc</div>
+      </div>
+      <div class="title">TỔNG HỢP KẾT QUẢ THEO ĐƠN VỊ</div>
+      <div class="sub">${escapeHtml(getReportScopeLabel(report))}</div>
+      <div class="summary">
+        <b>Tổng số thí sinh:</b> ${report.totalRegistered} •
+        <b>Đã tham gia:</b> ${report.totalPresent} •
+        <b>Chưa tham gia:</b> ${report.totalAbsent} •
+        <b>Tỷ lệ tham gia:</b> ${report.rate.toFixed(1)}%
+      </div>
+      <table class="table-center">
+        <thead>
+          <tr>
+            <th>STT</th><th>Đơn vị</th><th>Tổng danh sách</th><th>Đã thi</th><th>Chưa thi</th><th>Yếu</th><th>Trung bình</th><th>Khá</th><th>Xuất sắc</th><th>Tỷ lệ tham gia</th>
+          </tr>
+        </thead>
+        <tbody>${rowsHtml}</tbody>
+      </table>
+    `);
+  }
+
+  function printAbsentList() {
+    const report = buildAttendanceReportData();
+    if (!report.absentRows.length) {
+      alert("Không có danh sách thí sinh chưa dự thi để in.");
+      return;
+    }
+    const rowsHtml = report.absentRows.map((item, idx) => `
+      <tr>
+        <td>${idx + 1}</td>
+        <td>${escapeHtml(item.unit)}</td>
+        <td>${escapeHtml(item.name)}</td>
+        <td>${escapeHtml(item.position || DEFAULT_POSITION)}</td>
+      </tr>
+    `).join("");
+    printWindow("Danh sách thí sinh chưa dự thi", `
+      <div class="head">
+        <div>PHÒNG CẢNH SÁT PCCC VÀ CNCH<br>ĐỘI CÔNG TÁC PHÒNG CHÁY</div>
+        <div>CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM<br>Độc lập - Tự do - Hạnh phúc</div>
+      </div>
+      <div class="title">DANH SÁCH THÍ SINH CHƯA DỰ THI</div>
+      <div class="sub">${escapeHtml(getReportScopeLabel(report))}</div>
+      <div class="summary">
+        <b>Tổng số thí sinh chưa dự thi:</b> ${report.absentRows.length}
+      </div>
+      <table class="table-center">
+        <thead>
+          <tr>
+            <th>STT</th><th>Đơn vị</th><th>Họ và tên</th><th>Chức vụ</th>
+          </tr>
+        </thead>
+        <tbody>${rowsHtml}</tbody>
+      </table>
+    `);
+  }
+
+  function exportAttendanceUnitExcel() {
+    const report = buildAttendanceReportData();
+    if (!report.unitRows.length) {
+      alert("Chưa có dữ liệu tổng hợp theo đơn vị để xuất.");
+      return;
+    }
+    const sheetRows = report.unitRows.map((item, idx) => ({
+      STT: idx + 1,
+      "Đơn vị": item.unit,
+      "Tổng danh sách": item.total,
+      "Đã thi": item.present,
+      "Chưa thi": item.absent,
+      "Yếu": item.grades["Yếu"] || 0,
+      "Trung bình": item.grades["Trung bình"] || 0,
+      "Khá": item.grades["Khá"] || 0,
+      "Xuất sắc": item.grades["Xuất sắc"] || 0,
+      "Tỷ lệ tham gia": item.rate.toFixed(1) + "%"
+    }));
+    sheetRows.push({
+      STT: "",
+      "Đơn vị": "Tổng",
+      "Tổng danh sách": report.totalRegistered,
+      "Đã thi": report.totalPresent,
+      "Chưa thi": report.totalAbsent,
+      "Yếu": report.overallGrades["Yếu"] || 0,
+      "Trung bình": report.overallGrades["Trung bình"] || 0,
+      "Khá": report.overallGrades["Khá"] || 0,
+      "Xuất sắc": report.overallGrades["Xuất sắc"] || 0,
+      "Tỷ lệ tham gia": report.rate.toFixed(1) + "%"
+    });
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.json_to_sheet(sheetRows);
+    XLSX.utils.book_append_sheet(wb, ws, "Tong hop theo don vi");
+    XLSX.writeFile(wb, "tong_hop_theo_don_vi_" + getSelectedReportMonth() + ".xlsx");
+  }
+
+  function exportAbsentListExcel() {
+    const report = buildAttendanceReportData();
+    if (!report.absentRows.length) {
+      alert("Không có danh sách thí sinh chưa dự thi để xuất.");
+      return;
+    }
+    const sheetRows = report.absentRows.map((item, idx) => ({
+      STT: idx + 1,
+      "Đơn vị": item.unit,
+      "Họ và tên": item.name,
+      "Chức vụ": item.position || DEFAULT_POSITION
+    }));
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.json_to_sheet(sheetRows);
+    XLSX.utils.book_append_sheet(wb, ws, "Chua du thi");
+    XLSX.writeFile(wb, "danh_sach_chua_du_thi_" + getSelectedReportMonth() + ".xlsx");
+  }
+
+  function exportResultListExcel() {
+    exportAdminExcel();
+  }
+
+  function printResultList() {
+    printAdminSummary();
+  }
+
+  function csvSafe(value) {
+    const v = String(value ?? "").replaceAll('"', '""');
+    return '"' + v + '"';
+  }
+
+  function handleCandidateStartByEnter(e) {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      startExam();
+    }
+  }
+
+  function bindQuestionProtection() {
+    const questionBox = $("questionBox");
+    ["copy", "cut", "contextmenu", "selectstart", "dragstart"].forEach(evt => {
+      questionBox.addEventListener(evt, (e) => e.preventDefault());
+    });
+    document.addEventListener("copy", (e) => {
+      if (!$("examPanel").classList.contains("hidden")) e.preventDefault();
+    });
+    document.addEventListener("cut", (e) => {
+      if (!$("examPanel").classList.contains("hidden")) e.preventDefault();
+    });
+    document.addEventListener("contextmenu", (e) => {
+      if (!$("examPanel").classList.contains("hidden") && questionBox.contains(e.target)) e.preventDefault();
+    });
+    document.addEventListener("keydown", (e) => {
+      if ($("examPanel").classList.contains("hidden")) return;
+      const key = String(e.key || "").toLowerCase();
+      if ((e.ctrlKey || e.metaKey) && ["a", "c", "x", "s", "p", "u"].includes(key)) {
+        e.preventDefault();
+      }
+    });
+  }
+
+  function initEvents() {
+    $("btnCandidateMode").addEventListener("click", () => {
+      fetchExamWindowConfig(true);
+      prefetchEligibleRosterAll();
+      $("roleList").classList.add("hidden");
+      $("candidateForm").classList.remove("hidden");
+      updateMain("Thông tin thí sinh", "Chọn đơn vị và chọn tên trong danh sách để bắt đầu làm bài.");
+      refreshCandidateNameOptions("");
+      prefetchEligibleRosterAll();
+      showOnly("welcomePanel");
+      renderExamGateStatus();
+    });
+
+    $("btnAdminMode").addEventListener("click", () => {
+      $("roleList").classList.add("hidden");
+      $("adminLogin").classList.remove("hidden");
+      updateMain("Đăng nhập admin", "Nhập mật khẩu để xem cấu hình và kết quả tổng hợp.");
+      showOnly("welcomePanel");
+    });
+
+    $("btnBackFromCandidate").addEventListener("click", () => {
+      resetSidePanels();
+      setHomeHeader();
+      showOnly("welcomePanel");
+    });
+
+    $("btnBackFromAdmin").addEventListener("click", () => {
+      resetSidePanels();
+      setHomeHeader();
+      showOnly("welcomePanel");
+    });
+
+    $("btnStartExam").addEventListener("click", startExam);
+    $("unit").addEventListener("change", async () => {
+      refreshCandidateNameOptions("");
+      ensureCandidatePoolForUnit($("unit").value.trim());
+    });
+    $("unit").addEventListener("keydown", handleCandidateStartByEnter);
+    $("candidateNameSelect").addEventListener("change", handleCandidateNameChange);
+    $("candidateNameSelect").addEventListener("keydown", handleCandidateStartByEnter);
+
+    $("btnPrev").addEventListener("click", () => {
+      if (state.currentIndex > 0) {
+        state.currentIndex--;
+        renderQuestion();
+        saveActiveExam();
+      }
+    });
+    $("btnNext").addEventListener("click", () => {
+      if (state.currentIndex < state.examQuestions.length - 1) {
+        state.currentIndex++;
+        renderQuestion();
+        saveActiveExam();
+      }
+    });
+    $("btnToggleFlag").addEventListener("click", () => {
+      const q = state.examQuestions[state.currentIndex];
+      if (!q) return;
+      state.flags[q.examIndex] = !state.flags[q.examIndex];
+      renderQuestion();
+      saveActiveExam();
+    });
+    $("btnJumpUnanswered").addEventListener("click", () => {
+      if (!jumpToFirst(q => !state.answers[q.examIndex])) {
+        alert("Không còn câu nào chưa trả lời.");
+      }
+    });
+    $("btnJumpFlagged").addEventListener("click", () => {
+      if (!jumpToFirst(q => state.flags[q.examIndex])) {
+        alert("Không có câu nào đang được đánh dấu xem lại.");
+      }
+    });
+
+    $("btnSubmitExam").addEventListener("click", () => submitExam(false));
+    $("btnBackHomeFromResult").addEventListener("click", () => {
+      $("fullName").value = "";
+      $("position").value = "";
+      $("unit").value = "";
+      $("candidateNameSelect").innerHTML = '<option value="">-- Chọn đơn vị trước --</option>';
+      $("candidateNameSelect").disabled = true;
+      updateCandidateHiddenFields("", null);
+      resetSidePanels();
+      clearActiveExam();
+      setHomeHeader();
+      renderWelcomePanel();
+      showOnly("welcomePanel");
+    });
+    $("btnPrintResult").addEventListener("click", printResult);
+    $("btnPrintAttendanceUnit")?.addEventListener("click", printAttendanceUnitSummary);
+    $("btnExportAttendanceUnitExcel")?.addEventListener("click", exportAttendanceUnitExcel);
+    $("btnPrintAbsentList")?.addEventListener("click", printAbsentList);
+    $("btnExportAbsentListExcel")?.addEventListener("click", exportAbsentListExcel);
+    $("btnExportResultExcel").addEventListener("click", exportResultExcel);
+
+    async function handleAdminLogin() {
+      if ($("adminPassword").value !== ADMIN_PASSWORD) {
+        alert("Sai mật khẩu admin.");
+        return;
+      }
+      $("adminLogin").classList.add("hidden");
+      $("candidateForm").classList.add("hidden");
+      $("roleList").classList.remove("hidden");
+      updateMain("Admin", "");
+      showOnly("adminPanel");
+      showAdminSection("structure");
+      await fetchExamWindowConfig();
+      await fetchAdminResults();
+    }
+    $("btnAdminLogin").addEventListener("click", handleAdminLogin);
+    $("adminPassword").addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        handleAdminLogin();
+      }
+    });
+
+    document.querySelectorAll(".admin-tab-btn").forEach(btn => {
+      btn.addEventListener("click", () => showAdminSection(btn.dataset.adminTab || "structure"));
+    });
+
+    if ($("btnRefreshResults")) $("btnRefreshResults").addEventListener("click", fetchAdminResults);
+    if ($("btnExportCsv")) $("btnExportCsv").addEventListener("click", exportAdminCsv);
+    $("btnExportResultListExcel")?.addEventListener("click", exportResultListExcel);
+    $("btnPrintResultList")?.addEventListener("click", printResultList);
+
+    $("adminRosterUnit").addEventListener("change", () => {
+      if ($("adminRemoveUnit") && !$("adminRemoveUnit").value) {
+        $("adminRemoveUnit").value = $("adminRosterUnit").value;
+      }
+      renderAdminParticipantList();
+    });
+    $("adminRemoveUnit").addEventListener("change", () => {
+      renderAdminParticipantList();
+    });
+    $("btnAddParticipant").addEventListener("click", addParticipantForAdmin);
+    $("btnDeleteParticipant").addEventListener("click", deleteSelectedParticipantForAdmin);
+    $("btnExportRosterExcel")?.addEventListener("click", exportParticipantRosterExcel);
+    $("btnPrintRoster")?.addEventListener("click", printParticipantRoster);
+    $("adminParticipantName").addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        addParticipantForAdmin();
+      }
+    });
+    $("btnLogoutAdmin").addEventListener("click", () => {
+      $("adminPassword").value = "";
+      resetSidePanels();
+      setHomeHeader();
+      renderWelcomePanel();
+      showOnly("welcomePanel");
+    });
+
+    document.addEventListener("input", (e) => {
+      if (e.target.classList && e.target.classList.contains("distribution-input")) {
+        updateDistributionSummary("distributionSummary", "distribution-input", "settingQuestionCount");
+      }
+      if (e.target.classList && e.target.classList.contains("unit-distribution-input")) {
+        updateDistributionSummary("unitDistributionSummary", "unit-distribution-input", null, getGlobalExamSettings().totalQuestions);
+      }
+      if (e.target && (e.target.id === "settingExamMonth" || e.target.id === "settingExamRound")) {
+        const periodBox = $("examPeriodSummary");
+        if (periodBox) {
+          periodBox.className = "status info";
+          periodBox.textContent = "Kỳ thi hiện hành: " + buildExamCycleLabel($("settingExamMonth").value, $("settingExamRound").value) + ". Thí sinh đã có kết quả trong tháng này sẽ không được đăng nhập thi lại.";
+        }
+        if (!$("adminPanel").classList.contains("hidden")) {
+          renderWelcomePanel();
+        }
+      }
+      if (e.target && e.target.id === "settingWelcomeContent") {
+        renderWelcomePanel();
+      }
+    });
+
+    $("btnAutoDistribute").addEventListener("click", () => {
+      const cats = state.categories.length ? state.categories : ["Chung"];
+      const base = Math.floor(100 / cats.length);
+      const remainder = 100 % cats.length;
+      document.querySelectorAll(".distribution-input").forEach((input, idx) => {
+        input.value = base + (idx < remainder ? 1 : 0);
+      });
+      updateDistributionSummary("distributionSummary", "distribution-input", "settingQuestionCount");
+    });
+
+    $("btnClearDistribution").addEventListener("click", () => {
+      document.querySelectorAll(".distribution-input").forEach(input => { input.value = 0; });
+      updateDistributionSummary("distributionSummary", "distribution-input", "settingQuestionCount");
+    });
+
+    $("settingUnitConfigTarget").addEventListener("change", () => {
+      renderUnitStructureEditor();
+    });
+    $("btnUnitLoadGlobal").addEventListener("click", () => {
+      const unit = $("settingUnitConfigTarget").value.trim();
+      if (!unit) {
+        alert("Vui lòng chọn đơn vị trước.");
+        return;
+      }
+      fillUnitStructureForm(unit, true);
+    });
+    $("btnSaveUnitStructure").addEventListener("click", saveUnitStructureConfig);
+    $("btnDeleteUnitStructure").addEventListener("click", deleteUnitStructureConfig);
+
+    $("btnSaveExamInfo").addEventListener("click", async () => {
+      const currentConfig = normalizeExamWindow(state.examWindow);
+      await saveExamWindowConfig({
+        ...currentConfig,
+        updatedAt: new Date().toISOString(),
+        examPeriod: readAdminExamPeriodForm(),
+        examInfo: readAdminExamInfoForm()
+      });
+    });
+
+    $("btnSaveAllSettings").addEventListener("click", async () => {
+      const settings = readAdminSettingsForm();
+      const distTotal = Number(Object.values(settings.groupDistribution).reduce((sum, v) => sum + Number(v || 0), 0).toFixed(2));
+      if (distTotal > 0 && distTotal !== 100) {
+        alert("Tổng tỷ lệ chuyên đề phải bằng 100%.");
+        return;
+      }
+      const planCheck = computeDistributionPlan(settings.groupDistribution, settings.totalQuestions);
+      if (distTotal === 100 && !planCheck.valid && planCheck.reason === "insufficient") {
+        alert("Ngân hàng câu hỏi hiện không đủ để bốc đề theo tỷ lệ đã cấu hình: " + planCheck.shortages.join("; "));
+        return;
+      }
+      if (settings.totalQuestions > state.allQuestions.length) {
+        alert("Số câu cấu hình lớn hơn số câu hiện có trong ngân hàng.");
+        return;
+      }
+
+      const start = parseLocalDateTime($("examOpenStart").value);
+      const end = parseLocalDateTime($("examOpenEnd").value);
+      let enabled = false;
+      let startIso = "";
+      let endIso = "";
+      if ($("examOpenStart").value || $("examOpenEnd").value) {
+        if (!start || !end) {
+          alert("Vui lòng nhập đầy đủ thời điểm mở thi và đóng thi.");
+          return;
+        }
+        if (end <= start) {
+          alert("Thời điểm đóng thi phải sau thời điểm mở thi.");
+          return;
+        }
+        enabled = true;
+        startIso = start.toISOString();
+        endIso = end.toISOString();
+      }
+      saveCurrentRosterEditorToState(false);
+      await saveExamWindowConfig({
+        enabled,
+        start: startIso,
+        end: endIso,
+        updatedAt: new Date().toISOString(),
+        examSettings: settings,
+        participantRegistry: normalizeParticipantRegistry(state.examWindow.participantRegistry),
+        examPeriod: readAdminExamPeriodForm(),
+        examInfo: readAdminExamInfoForm()
+      });
+    });
+
+    $("btnOpenExamNow").addEventListener("click", async () => {
+      const settings = readAdminSettingsForm();
+      const now = new Date();
+      const end = new Date(now.getTime() + (settings.timeMinutes + 10) * 60 * 1000);
+      saveCurrentRosterEditorToState(false);
+      await saveExamWindowConfig({
+        enabled: true,
+        start: now.toISOString(),
+        end: end.toISOString(),
+        updatedAt: now.toISOString(),
+        examSettings: settings,
+        participantRegistry: normalizeParticipantRegistry(state.examWindow.participantRegistry),
+        examPeriod: readAdminExamPeriodForm(),
+        examInfo: readAdminExamInfoForm()
+      });
+    });
+
+    $("btnCloseExamNow").addEventListener("click", async () => {
+      const ok = confirm("Bạn chắc chắn muốn đóng thi ngay?");
+      if (!ok) return;
+      const settings = readAdminSettingsForm();
+      saveCurrentRosterEditorToState(false);
+      await saveExamWindowConfig({
+        enabled: false,
+        start: "",
+        end: "",
+        updatedAt: new Date().toISOString(),
+        examSettings: settings,
+        participantRegistry: normalizeParticipantRegistry(state.examWindow.participantRegistry),
+        examPeriod: readAdminExamPeriodForm(),
+        examInfo: readAdminExamInfoForm()
+      });
+    });
+
+    ["reportMonth","filterExamRound","filterKeyword","filterUnit","filterPosition","filterPassStatus","filterDateFrom","filterDateTo","filterMinScore","filterMaxScore"].forEach(id => {
+      const el = $(id);
+      el.addEventListener("change", applyAdminFilters);
+      el.addEventListener("input", applyAdminFilters);
+      el.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") applyAdminFilters();
+      });
+    });
+    if ($("btnApplyFilters")) $("btnApplyFilters").addEventListener("click", applyAdminFilters);
+    $("btnClearFilters").addEventListener("click", () => {
+      ["filterExamRound","filterKeyword","filterUnit","filterPosition","filterPassStatus","filterDateFrom","filterDateTo","filterMinScore","filterMaxScore"].forEach(id => {
+        $(id).value = "";
+      });
+      applyAdminFilters();
+    });
+  }
+
+  bindQuestionProtection();
+  initEvents();
+  showAdminSection("structure");
+  renderWelcomePanel();
+  updateCandidateStructureSummary();
+  renderResumeBox();
+  updateFullscreenState();
+  syncExamTopupVisibility("welcomePanel");
+  renderExamGateStatus();
+  fetchExamWindowConfig(true).then(() => prefetchEligibleRosterAll()).catch(() => {});
+  setInterval(renderExamGateStatus, 30000);
+  loadQuestionsFromExcel();
+})();
+</script>
 </body>
 </html>
