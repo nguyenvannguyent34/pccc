@@ -2846,8 +2846,9 @@ function normalizeUnitExamSettingsMap(rawMap, baseSettings = DEFAULT_SETTINGS) {
       const url = SCRIPT_URL + (SCRIPT_URL.includes("?") ? "&" : "?") + "action=getConfig&_ts=" + Date.now();
       const resp = await fetch(url);
       const data = await resp.json();
-      if (data && data.ok && data.config) {
-        state.examWindow = normalizeExamWindow(data.config);
+      const serverConfig = data?.config || data?.examWindow || data?.settingsConfig || null;
+      if (data && (data.ok === true || data.status === "success" || data.success === true) && serverConfig) {
+        state.examWindow = normalizeExamWindow(serverConfig);
         saveLocalExamWindow(state.examWindow);
         if (data.candidatePool && typeof data.candidatePool === "object") {
           const period = normalizeExamPeriod(data.candidatePool.period || state.examWindow.examPeriod || {});
@@ -2906,7 +2907,7 @@ function normalizeUnitExamSettingsMap(rawMap, baseSettings = DEFAULT_SETTINGS) {
         headers: { "Content-Type": "text/plain;charset=utf-8" }
       });
       const data = await resp.json().catch(() => ({ ok: true }));
-      if (data && data.ok) {
+      if (data && (data.ok === true || data.status === "success" || data.success === true)) {
         statusBox.className = "status success";
         statusBox.textContent = "Đã lưu toàn bộ cấu hình kỳ thi thành công.";
         showToast("Đã lưu toàn bộ cấu hình kỳ thi thành công.", "success");
@@ -3642,6 +3643,18 @@ function normalizeUnitExamSettingsMap(rawMap, baseSettings = DEFAULT_SETTINGS) {
     }
   }
 
+  async function syncLatestExamWindowForCandidate() {
+    if (SCRIPT_URL && !SCRIPT_URL.includes("PASTE_YOUR")) {
+      try {
+        await fetchExamWindowConfig(true);
+      } catch (err) {
+        console.warn("Không đồng bộ được trạng thái mở thi trước khi vào thi:", err);
+      }
+    }
+    renderExamGateStatus();
+    return getExamWindowStatus();
+  }
+
   async function startExam() {
     const startBtn = $("btnStartExam");
     if (startBtn) {
@@ -3650,7 +3663,7 @@ function normalizeUnitExamSettingsMap(rawMap, baseSettings = DEFAULT_SETTINGS) {
       startBtn.textContent = "Đang vào thi...";
     }
     try {
-      const gateStatus = getExamWindowStatus();
+      const gateStatus = await syncLatestExamWindowForCandidate();
       if (!gateStatus.allowLogin) {
         alert(gateStatus.message);
         renderExamGateStatus();
@@ -4661,16 +4674,23 @@ function normalizeUnitExamSettingsMap(rawMap, baseSettings = DEFAULT_SETTINGS) {
   }
 
   function initEvents() {
-    $("btnCandidateMode").addEventListener("click", () => {
-      fetchExamWindowConfig(true);
-      prefetchEligibleRosterAll();
-      $("roleList").classList.add("hidden");
-      $("candidateForm").classList.remove("hidden");
-      updateMain("Thông tin thí sinh", "Chọn đơn vị và chọn tên trong danh sách để bắt đầu làm bài.");
-      refreshCandidateNameOptions("");
-      prefetchEligibleRosterAll();
-      showOnly("welcomePanel");
-      renderExamGateStatus();
+    $("btnCandidateMode").addEventListener("click", async () => {
+      const btn = $("btnCandidateMode");
+      if (btn) btn.disabled = true;
+      setStatus("info", "Đang đồng bộ trạng thái mở thi từ hệ thống...");
+      try {
+        await fetchExamWindowConfig(true);
+        await prefetchEligibleRosterAll();
+        $("roleList").classList.add("hidden");
+        $("candidateForm").classList.remove("hidden");
+        updateMain("Thông tin thí sinh", "Chọn đơn vị và chọn tên trong danh sách để bắt đầu làm bài.");
+        refreshCandidateNameOptions("");
+        showOnly("welcomePanel");
+        renderExamGateStatus();
+      } finally {
+        if (btn) btn.disabled = false;
+        setStatus("", "");
+      }
     });
 
     $("btnAdminMode").addEventListener("click", () => {
@@ -4982,7 +5002,9 @@ function normalizeUnitExamSettingsMap(rawMap, baseSettings = DEFAULT_SETTINGS) {
   syncExamTopupVisibility("welcomePanel");
   renderExamGateStatus();
   fetchExamWindowConfig(true).then(() => prefetchEligibleRosterAll()).catch(() => {});
-  setInterval(renderExamGateStatus, 30000);
+  setInterval(() => {
+    fetchExamWindowConfig(true).catch(() => renderExamGateStatus());
+  }, 30000);
   loadQuestionsFromExcel();
 })();
 </script>
